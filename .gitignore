@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mcp config (contains project-specific refs)
+.mcp.json
+
+# python utilities (doc fetching scripts)
+__pycache__/
+*.pyc
+fetch_docs.py
+requirements.txt
+
+# docs (fetched reference docs, not part of the app)
+docs/
+
+# shadcn scaffold examples
+components/component-example.tsx
+components/example.tsx
