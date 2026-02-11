@@ -16,11 +16,19 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  DialogTrigger, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
   CircleNotch,
   CheckCircle,
   WarningCircle,
   ArrowsClockwise,
   Globe,
+  Plus,
+  PencilSimple,
+  ShieldCheck,
 } from "@phosphor-icons/react";
 
 type Org = {
@@ -66,12 +74,33 @@ function domainStatusBadge(status: string) {
   }
 }
 
-export function SettingsForm({ org }: { org: Org }) {
+type ConsentType = {
+  id: string;
+  name: string;
+  description: string | null;
+  legal_text: string | null;
+  is_active: boolean;
+};
+
+export function SettingsForm({
+  org,
+  consentTypes: initialConsentTypes,
+}: {
+  org: Org;
+  consentTypes: ConsentType[];
+}) {
   const [name, setName] = useState(org.name);
   const [apiKey, setApiKey] = useState(org.resend_api_key ?? "");
   const [fromName, setFromName] = useState(org.from_name ?? "");
   const [fromPrefix, setFromPrefix] = useState("");
   const [selectedDomain, setSelectedDomain] = useState("");
+
+  // Consent types state
+  const [consentTypes, setConsentTypes] = useState<ConsentType[]>(initialConsentTypes);
+  const [newConsentName, setNewConsentName] = useState("");
+  const [newConsentDesc, setNewConsentDesc] = useState("");
+  const [newConsentLegal, setNewConsentLegal] = useState("");
+  const [addingConsent, setAddingConsent] = useState(false);
   const [domains, setDomains] = useState<ResendDomain[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [loadingDomains, setLoadingDomains] = useState(false);
@@ -456,6 +485,147 @@ export function SettingsForm({ org }: { org: Org }) {
           </Card>
         </form>
       )}
+
+      {/* Consent Types */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" weight="duotone" />
+              <CardTitle>Consent Types</CardTitle>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Plus className="mr-1 h-3 w-3" />Add
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add consent type</DialogTitle>
+                  <DialogDescription>
+                    Define a new consent category for your contacts.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label>Name</Label>
+                    <Input
+                      placeholder="e.g. Weekly Newsletter"
+                      value={newConsentName}
+                      onChange={(e) => setNewConsentName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Description</Label>
+                    <Input
+                      placeholder="What this consent covers"
+                      value={newConsentDesc}
+                      onChange={(e) => setNewConsentDesc(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Legal text (optional)</Label>
+                    <Textarea
+                      placeholder="Legal consent text shown to contacts"
+                      value={newConsentLegal}
+                      onChange={(e) => setNewConsentLegal(e.target.value)}
+                      className="min-h-[80px]"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                  <Button
+                    disabled={addingConsent || !newConsentName.trim()}
+                    onClick={async () => {
+                      setAddingConsent(true);
+                      const supabase = createClient();
+                      const { data, error } = await supabase
+                        .from("consent_types")
+                        .insert({
+                          org_id: org.id,
+                          name: newConsentName.trim(),
+                          description: newConsentDesc.trim() || null,
+                          legal_text: newConsentLegal.trim() || null,
+                        })
+                        .select()
+                        .single();
+                      setAddingConsent(false);
+                      if (error) {
+                        toast.error("Failed to add consent type");
+                      } else {
+                        setConsentTypes([...consentTypes, data]);
+                        setNewConsentName("");
+                        setNewConsentDesc("");
+                        setNewConsentLegal("");
+                        toast.success("Consent type added");
+                      }
+                    }}
+                  >
+                    {addingConsent ? "Adding..." : "Add"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <CardDescription>
+            Manage consent categories for your contacts. These appear in the preference center.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {consentTypes.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No consent types defined yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {consentTypes.map((ct) => (
+                <div
+                  key={ct.id}
+                  className="flex items-center justify-between p-3 rounded-md border"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{ct.name}</p>
+                    {ct.description && (
+                      <p className="text-xs text-muted-foreground">{ct.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={ct.is_active ? "default" : "outline"}>
+                      {ct.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        const supabase = createClient();
+                        const newActive = !ct.is_active;
+                        const { error } = await supabase
+                          .from("consent_types")
+                          .update({ is_active: newActive })
+                          .eq("id", ct.id);
+                        if (error) {
+                          toast.error("Failed to update");
+                        } else {
+                          setConsentTypes(
+                            consentTypes.map((c) =>
+                              c.id === ct.id ? { ...c, is_active: newActive } : c
+                            )
+                          );
+                          toast.success(newActive ? "Activated" : "Deactivated");
+                        }
+                      }}
+                    >
+                      {ct.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -17,7 +17,15 @@ export default async function TemplatesPage() {
     <TemplatesClient
       templates={templates ?? []}
       orgId={user.organizations.id}
+      orgName={user.organizations.name}
       fromName={user.organizations.from_name || user.organizations.name}
+      existingBrandConfig={
+        user.organizations.brand_config &&
+        typeof user.organizations.brand_config === "object" &&
+        Object.keys(user.organizations.brand_config as object).length > 0
+          ? (user.organizations.brand_config as { primary_color?: string; secondary_color?: string; header_bg_color?: string; text_color?: string; logo_url?: string; footer_text?: string })
+          : undefined
+      }
     />
   );
 }

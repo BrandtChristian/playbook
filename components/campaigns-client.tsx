@@ -44,6 +44,9 @@ import {
   CircleNotch,
   ArrowLeft,
   PaperPlaneRight,
+  CaretRight,
+  CaretDown,
+  Notebook,
 } from "@phosphor-icons/react";
 import { TemplateEditor } from "@/components/template-editor";
 
@@ -107,6 +110,52 @@ const STATUS_BADGE: Record<
   },
 };
 
+type CampaignGroup =
+  | { type: "standalone"; campaign: Campaign }
+  | { type: "sequence"; name: string; campaigns: Campaign[] };
+
+function groupCampaigns(campaigns: Campaign[]): CampaignGroup[] {
+  const groups: CampaignGroup[] = [];
+  const sequenceMap = new Map<string, Campaign[]>();
+
+  for (const c of campaigns) {
+    const dashIdx = c.name.indexOf(" \u2014 ");
+    if (dashIdx > 0) {
+      const prefix = c.name.substring(0, dashIdx);
+      if (!sequenceMap.has(prefix)) sequenceMap.set(prefix, []);
+      sequenceMap.get(prefix)!.push(c);
+    } else {
+      groups.push({ type: "standalone", campaign: c });
+    }
+  }
+
+  for (const [name, seqCampaigns] of sequenceMap) {
+    if (seqCampaigns.length === 1) {
+      groups.push({ type: "standalone", campaign: seqCampaigns[0] });
+    } else {
+      groups.push({ type: "sequence", name, campaigns: seqCampaigns });
+    }
+  }
+
+  groups.sort((a, b) => {
+    const aDate = a.type === "standalone" ? a.campaign.created_at : a.campaigns[0].created_at;
+    const bDate = b.type === "standalone" ? b.campaign.created_at : b.campaigns[0].created_at;
+    return new Date(bDate).getTime() - new Date(aDate).getTime();
+  });
+
+  return groups;
+}
+
+function summarizeStatuses(campaigns: Campaign[]): string {
+  const counts: Record<string, number> = {};
+  for (const c of campaigns) {
+    counts[c.status] = (counts[c.status] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([status, count]) => `${count} ${status}`)
+    .join(", ");
+}
+
 export function CampaignsClient({
   campaigns: initialCampaigns,
   templates,
@@ -127,6 +176,7 @@ export function CampaignsClient({
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [editingCampaign, setEditingCampaign] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Create form state
   const [name, setName] = useState("");
@@ -545,61 +595,146 @@ export function CampaignsClient({
         </Card>
       ) : (
         <div className="grid gap-3">
-          {campaigns.map((campaign) => {
-            const statusInfo =
-              STATUS_BADGE[campaign.status] || STATUS_BADGE.draft;
-            const segment = segments.find(
-              (s) => s.id === campaign.segment_id
-            );
+          {groupCampaigns(campaigns).map((group) => {
+            if (group.type === "standalone") {
+              const campaign = group.campaign;
+              const statusInfo = STATUS_BADGE[campaign.status] || STATUS_BADGE.draft;
+              const segment = segments.find((s) => s.id === campaign.segment_id);
+
+              return (
+                <Card
+                  key={campaign.id}
+                  className="cursor-pointer transition-colors hover:border-primary/50"
+                  onClick={() => setSelectedCampaign(campaign)}
+                >
+                  <CardContent className="flex items-center justify-between py-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{campaign.name}</p>
+                        <Badge variant={statusInfo.variant} className="gap-1 shrink-0">
+                          {statusInfo.icon}
+                          {statusInfo.label}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate mt-0.5">
+                        {campaign.subject}
+                      </p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        {segment && <span>{segment.name}</span>}
+                        {campaign.sent_at && (
+                          <span>Sent {new Date(campaign.sent_at).toLocaleDateString()}</span>
+                        )}
+                        {campaign.stats && (
+                          <span>{(campaign.stats as Record<string, number>).sent ?? 0} delivered</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      {campaign.status === "draft" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => { e.stopPropagation(); handleDelete(campaign.id); }}
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            // Sequence group
+            const isExpanded = expandedGroups.has(group.name);
+            const segment = segments.find((s) => s.id === group.campaigns[0].segment_id);
+            const totalDelivered = group.campaigns.reduce((sum, c) => sum + ((c.stats as Record<string, number>)?.sent ?? 0), 0);
 
             return (
-              <Card
-                key={campaign.id}
-                className="cursor-pointer transition-colors hover:border-primary/50"
-                onClick={() => setSelectedCampaign(campaign)}
-              >
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{campaign.name}</p>
-                      <Badge variant={statusInfo.variant} className="gap-1 shrink-0">
-                        {statusInfo.icon}
-                        {statusInfo.label}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate mt-0.5">
-                      {campaign.subject}
-                    </p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      {segment && <span>{segment.name}</span>}
-                      {campaign.sent_at && (
-                        <span>
-                          Sent{" "}
-                          {new Date(campaign.sent_at).toLocaleDateString()}
-                        </span>
+              <Card key={`seq-${group.name}`} className="transition-colors hover:border-primary/50">
+                <CardContent className="p-0">
+                  {/* Sequence header */}
+                  <button
+                    type="button"
+                    className="flex items-center justify-between w-full py-4 px-6 text-left"
+                    onClick={() => {
+                      setExpandedGroups((prev) => {
+                        const next = new Set(prev);
+                        next.has(group.name) ? next.delete(group.name) : next.add(group.name);
+                        return next;
+                      });
+                    }}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {isExpanded ? (
+                        <CaretDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <CaretRight className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
-                      {campaign.stats && (
-                        <span>
-                          {(campaign.stats as Record<string, number>).sent ?? 0}{" "}
-                          delivered
-                        </span>
-                      )}
+                      <Notebook className="h-4 w-4 text-primary shrink-0" weight="duotone" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{group.name}</p>
+                          <Badge variant="secondary" className="shrink-0">
+                            {group.campaigns.length} emails
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                          <span>{summarizeStatuses(group.campaigns)}</span>
+                          {segment && <span>{segment.name}</span>}
+                          {totalDelivered > 0 && <span>{totalDelivered} delivered</span>}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
-                    {campaign.status === "draft" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(campaign.id);
-                        }}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+                  </button>
+
+                  {/* Expanded steps */}
+                  {isExpanded && (
+                    <div className="border-t">
+                      {group.campaigns.map((campaign, i) => {
+                        const stepStatusInfo = STATUS_BADGE[campaign.status] || STATUS_BADGE.draft;
+                        const stepName = campaign.name.substring(campaign.name.indexOf(" \u2014 ") + 3);
+
+                        return (
+                          <div
+                            key={campaign.id}
+                            className={`flex items-center justify-between py-3 pl-14 pr-6 cursor-pointer hover:bg-muted/50 transition-colors ${
+                              i < group.campaigns.length - 1 ? "border-b" : ""
+                            }`}
+                            onClick={() => setSelectedCampaign(campaign)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm truncate">{stepName}</p>
+                                <Badge variant={stepStatusInfo.variant} className="gap-1 shrink-0 text-xs">
+                                  {stepStatusInfo.icon}
+                                  {stepStatusInfo.label}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                {campaign.subject}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-4 text-xs text-muted-foreground">
+                              {campaign.stats && (
+                                <span>{(campaign.stats as Record<string, number>).sent ?? 0} delivered</span>
+                              )}
+                              {campaign.status === "draft" && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={(e) => { e.stopPropagation(); handleDelete(campaign.id); }}
+                                >
+                                  <Trash className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

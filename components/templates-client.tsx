@@ -12,8 +12,10 @@ import {
   DialogTrigger, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, PencilSimple, Trash, EnvelopeSimple } from "@phosphor-icons/react";
+import { Plus, PencilSimple, Trash, EnvelopeSimple, PaintBrush, CaretRight, CaretDown, Notebook } from "@phosphor-icons/react";
 import { TemplateEditor } from "@/components/template-editor";
+import { BrandBuilder } from "@/components/brand-builder";
+import type { BrandConfig } from "@/components/brand-builder";
 
 type Template = {
   id: string;
@@ -30,17 +32,24 @@ type Template = {
 export function TemplatesClient({
   templates: initialTemplates,
   orgId,
+  orgName,
   fromName,
+  existingBrandConfig,
 }: {
   templates: Template[];
   orgId: string;
+  orgName: string;
   fromName?: string;
+  existingBrandConfig?: BrandConfig;
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [adding, setAdding] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [showBrandBuilder, setShowBrandBuilder] = useState(false);
+  const [brandConfig, setBrandConfig] = useState<BrandConfig | undefined>(existingBrandConfig);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +95,21 @@ export function TemplatesClient({
     setTemplates(templates.map((t) => (t.id === updated.id ? updated : t)));
   }
 
+  if (showBrandBuilder) {
+    return (
+      <BrandBuilder
+        orgId={orgId}
+        orgName={orgName}
+        existingConfig={brandConfig}
+        onBack={() => setShowBrandBuilder(false)}
+        onSaved={(config) => {
+          setBrandConfig(config);
+          setShowBrandBuilder(false);
+        }}
+      />
+    );
+  }
+
   if (editingTemplate) {
     return (
       <TemplateEditor
@@ -106,10 +130,15 @@ export function TemplatesClient({
             Email templates with Liquid variables for personalization.
           </p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />New template</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowBrandBuilder(true)}>
+            <PaintBrush className="mr-2 h-4 w-4" />
+            {brandConfig ? "Edit Brand" : "Build Brand"}
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" />New template</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create template</DialogTitle>
@@ -131,47 +160,145 @@ export function TemplatesClient({
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
-      {templates.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <EnvelopeSimple className="h-12 w-12 text-muted-foreground mb-4" weight="duotone" />
-            <p className="text-muted-foreground">No templates yet.</p>
-            <p className="text-sm text-muted-foreground mt-1">Create your first email template to get started.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {templates.map((template) => (
-            <Card key={template.id} className="group">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-base">{template.name}</CardTitle>
-                    <CardDescription className="mt-1 line-clamp-1">
-                      Subject: {template.subject}
-                    </CardDescription>
+      {(() => {
+        const userTemplates = templates.filter((t) => !t.is_system);
+        const systemTemplates = templates.filter((t) => t.is_system);
+
+        // Group system templates by category
+        const categoryGroups = new Map<string, Template[]>();
+        for (const t of systemTemplates) {
+          const cat = t.category || "other";
+          if (!categoryGroups.has(cat)) categoryGroups.set(cat, []);
+          categoryGroups.get(cat)!.push(t);
+        }
+
+        const categoryLabels: Record<string, string> = {
+          welcome: "Welcome Series",
+          newsletter: "Newsletter",
+          winback: "Win-back",
+          promotional: "Promotional",
+          onboarding: "Onboarding",
+          transactional: "Transactional",
+          other: "Other",
+        };
+
+        return (
+          <>
+            {/* User templates */}
+            {userTemplates.length === 0 && systemTemplates.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <EnvelopeSimple className="h-12 w-12 text-muted-foreground mb-4" weight="duotone" />
+                  <p className="text-muted-foreground">No templates yet.</p>
+                  <p className="text-sm text-muted-foreground mt-1">Create your first email template to get started.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {userTemplates.length > 0 && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {userTemplates.map((template) => (
+                      <Card key={template.id} className="group">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-base">{template.name}</CardTitle>
+                              <CardDescription className="mt-1 line-clamp-1">
+                                Subject: {template.subject}
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setEditingTemplate(template)}>
+                              <PencilSimple className="mr-1 h-3 w-3" />Edit
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)}>
+                              <Trash className="mr-1 h-3 w-3" />Delete
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                  {template.is_system && <Badge variant="secondary">System</Badge>}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditingTemplate(template)}>
-                    <PencilSimple className="mr-1 h-3 w-3" />Edit
-                  </Button>
-                  {!template.is_system && (
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)}>
-                      <Trash className="mr-1 h-3 w-3" />Delete
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                )}
+
+                {/* System templates grouped by category */}
+                {categoryGroups.size > 0 && (
+                  <div className="space-y-2">
+                    <h2 className="text-sm font-medium text-muted-foreground">System Templates</h2>
+                    <div className="grid gap-3">
+                      {Array.from(categoryGroups.entries()).map(([category, catTemplates]) => {
+                        const isExpanded = expandedCategories.has(category);
+
+                        return (
+                          <Card key={category} className="transition-colors hover:border-primary/50">
+                            <CardContent className="p-0">
+                              <button
+                                type="button"
+                                className="flex items-center justify-between w-full py-4 px-6 text-left"
+                                onClick={() => {
+                                  setExpandedCategories((prev) => {
+                                    const next = new Set(prev);
+                                    next.has(category) ? next.delete(category) : next.add(category);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {isExpanded ? (
+                                    <CaretDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  ) : (
+                                    <CaretRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  )}
+                                  <Notebook className="h-4 w-4 text-primary shrink-0" weight="duotone" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium">{categoryLabels[category] || category}</p>
+                                      <Badge variant="secondary">{catTemplates.length} template{catTemplates.length !== 1 ? "s" : ""}</Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="border-t">
+                                  {catTemplates.map((template, i) => (
+                                    <div
+                                      key={template.id}
+                                      className={`flex items-center justify-between py-3 pl-14 pr-6 hover:bg-muted/50 transition-colors ${
+                                        i < catTemplates.length - 1 ? "border-b" : ""
+                                      }`}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">{template.name}</p>
+                                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                          Subject: {template.subject}
+                                        </p>
+                                      </div>
+                                      <Button variant="outline" size="sm" onClick={() => setEditingTemplate(template)}>
+                                        <PencilSimple className="mr-1 h-3 w-3" />Edit
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("resend_api_key, from_email, from_name")
+    .select("resend_api_key, from_email, from_name, brand_config")
     .eq("id", profile.org_id)
     .single();
 
@@ -49,9 +49,14 @@ export async function POST(request: NextRequest) {
   const renderedSubject = await renderTemplate(subject, sampleData);
 
   // Render body with sample data + base layout
+  const brandConfig = (org.brand_config && typeof org.brand_config === "object" && Object.keys(org.brand_config).length > 0)
+    ? (org.brand_config as Record<string, string>)
+    : undefined;
+
   const html = await renderTestEmail({
     bodyHtml,
     fromName: org.from_name || undefined,
+    brandConfig,
   });
 
   const resend = getResendClient(org.resend_api_key);

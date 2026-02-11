@@ -16,6 +16,8 @@ export type Profile = {
     from_email: string | null;
     from_name: string | null;
     domain_verified: boolean;
+    onboarding_completed: boolean;
+    brand_config: Record<string, unknown> | null;
     created_at: string;
   };
 };

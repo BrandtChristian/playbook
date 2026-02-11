@@ -8,15 +8,26 @@ import {
   Text,
   Hr,
   Link,
+  Img,
   Preview,
   Font,
 } from "@react-email/components";
+
+export type BrandConfig = {
+  primary_color?: string;
+  secondary_color?: string;
+  header_bg_color?: string;
+  text_color?: string;
+  logo_url?: string;
+  footer_text?: string;
+};
 
 interface BaseLayoutProps {
   previewText?: string;
   bodyHtml: string;
   fromName?: string;
   unsubscribeUrl?: string;
+  brandConfig?: BrandConfig;
 }
 
 export function BaseEmailLayout({
@@ -24,7 +35,13 @@ export function BaseEmailLayout({
   bodyHtml,
   fromName = "Your Company",
   unsubscribeUrl = "{{{ UNSUBSCRIBE_URL }}}",
+  brandConfig,
 }: BaseLayoutProps) {
+  const bc = brandConfig || {};
+  const headerBg = bc.header_bg_color || "#ffffff";
+  const headerTextColor = isLightColor(headerBg) ? "#1a1a1a" : "#ffffff";
+  const primaryColor = bc.primary_color || "#1a1a1a";
+
   return (
     <Html lang="en">
       <Head>
@@ -43,27 +60,45 @@ export function BaseEmailLayout({
       <Body style={main}>
         <Container style={container}>
           {/* Header */}
-          <Section style={header}>
-            <Text style={headerText}>{fromName}</Text>
+          <Section style={{ ...header, backgroundColor: headerBg, borderBottom: headerBg === "#ffffff" ? "1px solid #e5e5e5" : "none" }}>
+            {bc.logo_url ? (
+              <table cellPadding="0" cellSpacing="0" border={0}>
+                <tbody>
+                  <tr>
+                    <td style={{ paddingRight: "12px", verticalAlign: "middle" }}>
+                      <Img src={bc.logo_url} alt={fromName} width="32" height="32" style={{ borderRadius: "4px" }} />
+                    </td>
+                    <td style={{ verticalAlign: "middle" }}>
+                      <Text style={{ ...headerTextStyle, color: headerTextColor }}>{fromName}</Text>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <Text style={{ ...headerTextStyle, color: headerTextColor }}>{fromName}</Text>
+            )}
           </Section>
 
-          {/* Body Content (user's HTML+Liquid rendered) */}
+          {/* Body Content */}
           <Section style={content}>
             <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
           </Section>
 
           {/* Footer */}
           <Hr style={hr} />
-          <Section style={footer}>
+          <Section style={footerSection}>
+            {bc.footer_text && (
+              <Text style={footerText}>{bc.footer_text}</Text>
+            )}
             <Text style={footerText}>
               Sent by {fromName}
             </Text>
             <Text style={footerText}>
-              <Link href={unsubscribeUrl} style={unsubscribeLink}>
+              <Link href={unsubscribeUrl} style={{ ...unsubscribeLink, color: primaryColor }}>
                 Unsubscribe
               </Link>
               {" · "}
-              <Link href="#" style={unsubscribeLink}>
+              <Link href={unsubscribeUrl} style={{ ...unsubscribeLink, color: primaryColor }}>
                 Manage preferences
               </Link>
             </Text>
@@ -72,6 +107,15 @@ export function BaseEmailLayout({
       </Body>
     </Html>
   );
+}
+
+function isLightColor(hex: string): boolean {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5;
 }
 
 const main: React.CSSProperties = {
@@ -87,13 +131,11 @@ const container: React.CSSProperties = {
 
 const header: React.CSSProperties = {
   padding: "24px 32px 16px",
-  borderBottom: "1px solid #e5e5e5",
 };
 
-const headerText: React.CSSProperties = {
+const headerTextStyle: React.CSSProperties = {
   fontSize: "18px",
   fontWeight: 700,
-  color: "#1a1a1a",
   margin: 0,
 };
 
@@ -106,7 +148,7 @@ const hr: React.CSSProperties = {
   margin: "0 32px",
 };
 
-const footer: React.CSSProperties = {
+const footerSection: React.CSSProperties = {
   padding: "16px 32px 24px",
 };
 
@@ -118,6 +160,5 @@ const footerText: React.CSSProperties = {
 };
 
 const unsubscribeLink: React.CSSProperties = {
-  color: "#999999",
   textDecoration: "underline",
 };

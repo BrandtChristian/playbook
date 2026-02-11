@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   // Fetch campaign with org info
   const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
-    .select("*, organizations:org_id(resend_api_key, from_email, from_name)")
+    .select("*, organizations:org_id(resend_api_key, from_email, from_name, brand_config)")
     .eq("id", campaignId)
     .single();
 
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     resend_api_key: string | null;
     from_email: string | null;
     from_name: string | null;
+    brand_config: Record<string, unknown> | null;
   };
 
   if (!org?.resend_api_key || !org?.from_email) {
@@ -107,6 +108,10 @@ export async function POST(request: NextRequest) {
     ? `${org.from_name} <${org.from_email}>`
     : org.from_email;
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+
   let sent = 0;
   let failed = 0;
 
@@ -123,14 +128,42 @@ export async function POST(request: NextRequest) {
     };
 
     try {
+      // Look up or create preference token for this contact
+      let unsubscribeUrl: string | undefined;
+      const { data: existingToken } = await supabase
+        .from("preference_tokens")
+        .select("token")
+        .eq("contact_id", contact.id)
+        .eq("org_id", campaign.org_id)
+        .single();
+
+      if (existingToken) {
+        unsubscribeUrl = `${appUrl}/preferences/${existingToken.token}`;
+      } else {
+        const { data: newToken } = await supabase
+          .from("preference_tokens")
+          .insert({ contact_id: contact.id, org_id: campaign.org_id })
+          .select("token")
+          .single();
+        if (newToken) {
+          unsubscribeUrl = `${appUrl}/preferences/${newToken.token}`;
+        }
+      }
+
       const renderedSubject = await renderTemplate(
         campaign.subject,
         contactData
       );
+      const brandConfig = (org.brand_config && Object.keys(org.brand_config).length > 0)
+        ? org.brand_config as Record<string, string>
+        : undefined;
+
       const html = await renderEmail({
         bodyHtml: campaign.body_html,
         data: contactData,
         fromName: org.from_name || undefined,
+        brandConfig,
+        unsubscribeUrl,
       });
 
       const { error: sendError } = await resend.emails.send({

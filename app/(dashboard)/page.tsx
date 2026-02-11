@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth/dal";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import {
@@ -11,6 +12,9 @@ import {
   EnvelopeSimple,
   ArrowRight,
 } from "@phosphor-icons/react/dist/ssr";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import type { OnboardingState } from "@/components/onboarding-checklist";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 const quickActions = [
   {
@@ -23,7 +27,7 @@ const quickActions = [
   {
     title: "Create Campaign",
     description: "Compose and send an email campaign",
-    href: "/campaigns/new",
+    href: "/campaigns",
     icon: PaperPlaneTilt,
   },
   {
@@ -42,6 +46,37 @@ const quickActions = [
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
+  const supabase = await createClient();
+
+  // Compute onboarding state from actual data
+  const [
+    { count: contactCount },
+    { count: segmentCount },
+    { count: campaignCount },
+    { count: sentCount },
+  ] = await Promise.all([
+    supabase.from("contacts").select("*", { count: "exact", head: true }).eq("org_id", user.organizations.id),
+    supabase.from("segments").select("*", { count: "exact", head: true }).eq("org_id", user.organizations.id),
+    supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("org_id", user.organizations.id),
+    supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("org_id", user.organizations.id).eq("status", "sent"),
+  ]);
+
+  const onboardingState: OnboardingState = {
+    resend_connected: !!user.organizations.resend_api_key,
+    contacts_imported: (contactCount ?? 0) > 0,
+    segment_created: (segmentCount ?? 0) > 0,
+    brand_built: !!(
+      user.organizations.brand_config &&
+      typeof user.organizations.brand_config === "object" &&
+      Object.keys(user.organizations.brand_config).length > 0
+    ),
+    playbook_launched: (campaignCount ?? 0) > 0,
+    campaign_sent: (sentCount ?? 0) > 0,
+  };
+
+  const showWizard =
+    !user.organizations.onboarding_completed &&
+    !user.organizations.resend_api_key;
 
   return (
     <div className="space-y-8">
@@ -54,19 +89,21 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {!user.organizations.resend_api_key && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-lg">Complete your setup</CardTitle>
-            <CardDescription>
-              Add your Resend API key in{" "}
-              <Link href="/settings" className="text-primary underline underline-offset-4">
-                Settings
-              </Link>{" "}
-              to start sending emails.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      {/* Onboarding wizard for brand new users */}
+      {showWizard && (
+        <OnboardingWizard
+          orgId={user.organizations.id}
+          orgName={user.organizations.name}
+          open={true}
+        />
+      )}
+
+      {/* Persistent checklist */}
+      {!user.organizations.onboarding_completed && (
+        <OnboardingChecklist
+          state={onboardingState}
+          orgId={user.organizations.id}
+        />
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -7,6 +7,10 @@ export const sampleData: Record<string, string> = {
   last_name: "Smith",
   email: "jane@example.com",
   company: "Acme Inc",
+  phone: "+1 555-0100",
+  job_title: "Marketing Manager",
+  city: "San Francisco",
+  country: "US",
 };
 
 export async function renderTemplate(

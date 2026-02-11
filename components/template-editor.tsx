@@ -34,6 +34,10 @@ const VARIABLE_TAGS = [
   "{{ last_name }}",
   "{{ email }}",
   "{{ company }}",
+  "{{ phone }}",
+  "{{ job_title }}",
+  "{{ city }}",
+  "{{ country }}",
 ];
 
 export function TemplateEditor({
