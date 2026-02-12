@@ -29,6 +29,7 @@ import {
   Plus,
   PencilSimple,
   ShieldCheck,
+  Eye,
 } from "@phosphor-icons/react";
 
 type Org = {
@@ -80,6 +81,7 @@ type ConsentType = {
   description: string | null;
   legal_text: string | null;
   is_active: boolean;
+  version: number;
 };
 
 export function SettingsForm({
@@ -101,6 +103,16 @@ export function SettingsForm({
   const [newConsentDesc, setNewConsentDesc] = useState("");
   const [newConsentLegal, setNewConsentLegal] = useState("");
   const [addingConsent, setAddingConsent] = useState(false);
+  const [editingConsent, setEditingConsent] = useState<ConsentType | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editLegal, setEditLegal] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [versionHistory, setVersionHistory] = useState<
+    Record<string, { version: number; legal_text: string | null; created_at: string }[]>
+  >({});
+  const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
+  const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [domains, setDomains] = useState<ResendDomain[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [loadingDomains, setLoadingDomains] = useState(false);
@@ -261,6 +273,79 @@ export function SettingsForm({
   }
 
   const isConnected = org.resend_api_key && domains.length > 0;
+
+  async function toggleVersionHistory(consentTypeId: string) {
+    if (expandedHistory === consentTypeId) {
+      setExpandedHistory(null);
+      return;
+    }
+    setExpandedHistory(consentTypeId);
+    if (!versionHistory[consentTypeId]) {
+      setLoadingHistory(consentTypeId);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("consent_type_versions")
+        .select("version, legal_text, created_at")
+        .eq("consent_type_id", consentTypeId)
+        .order("version", { ascending: false });
+      setVersionHistory((prev) => ({
+        ...prev,
+        [consentTypeId]: data ?? [],
+      }));
+      setLoadingHistory(null);
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingConsent) return;
+    setSavingEdit(true);
+    const supabase = createClient();
+    const legalChanged = editLegal.trim() !== (editingConsent.legal_text ?? "");
+    const newVersion = legalChanged ? editingConsent.version + 1 : editingConsent.version;
+
+    if (legalChanged) {
+      // Snapshot current version before updating
+      await supabase.from("consent_type_versions").insert({
+        consent_type_id: editingConsent.id,
+        version: editingConsent.version,
+        name: editingConsent.name,
+        description: editingConsent.description,
+        legal_text: editingConsent.legal_text,
+      });
+    }
+
+    const { error } = await supabase
+      .from("consent_types")
+      .update({
+        name: editName.trim(),
+        description: editDesc.trim() || null,
+        legal_text: editLegal.trim() || null,
+        version: newVersion,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", editingConsent.id);
+
+    setSavingEdit(false);
+    if (error) {
+      toast.error("Failed to update consent type");
+    } else {
+      setConsentTypes(
+        consentTypes.map((c) =>
+          c.id === editingConsent.id
+            ? {
+                ...c,
+                name: editName.trim(),
+                description: editDesc.trim() || null,
+                legal_text: editLegal.trim() || null,
+                version: newVersion,
+              }
+            : c
+        )
+      );
+      setEditingConsent(null);
+      toast.success(legalChanged ? `Updated to v${newVersion}` : "Updated");
+    }
+  }
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -494,12 +579,33 @@ export function SettingsForm({
               <ShieldCheck className="h-5 w-5 text-primary" weight="duotone" />
               <CardTitle>Consent Types</CardTitle>
             </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1 h-3 w-3" />Add
-                </Button>
-              </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center">
+                <a
+                  href="/preferences/preview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button size="sm" variant="ghost" type="button" className="text-xs h-7 px-2">
+                    <Eye className="mr-1 h-3 w-3" />Preferences
+                  </Button>
+                </a>
+                <a
+                  href="/unsubscribe/preview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button size="sm" variant="ghost" type="button" className="text-xs h-7 px-2">
+                    <Eye className="mr-1 h-3 w-3" />Unsub
+                  </Button>
+                </a>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1 h-3 w-3" />Add
+                  </Button>
+                </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add consent type</DialogTitle>
@@ -567,7 +673,8 @@ export function SettingsForm({
                   </Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            </div>
           </div>
           <CardDescription>
             Manage consent categories for your contacts. These appear in the preference center.
@@ -581,51 +688,187 @@ export function SettingsForm({
           ) : (
             <div className="space-y-2">
               {consentTypes.map((ct) => (
-                <div
-                  key={ct.id}
-                  className="flex items-center justify-between p-3 rounded-md border"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{ct.name}</p>
-                    {ct.description && (
-                      <p className="text-xs text-muted-foreground">{ct.description}</p>
-                    )}
+                <div key={ct.id} className="rounded-md border">
+                  <div className="flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-medium">{ct.name}</p>
+                      {ct.description && (
+                        <p className="text-xs text-muted-foreground">
+                          {ct.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleVersionHistory(ct.id)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      >
+                        v{ct.version}
+                        {ct.version > 1 && (
+                          <span className="ml-0.5">
+                            {expandedHistory === ct.id ? "\u25B4" : "\u25BE"}
+                          </span>
+                        )}
+                      </button>
+                      <Badge variant={ct.is_active ? "default" : "outline"}>
+                        {ct.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setEditingConsent(ct);
+                          setEditName(ct.name);
+                          setEditDesc(ct.description ?? "");
+                          setEditLegal(ct.legal_text ?? "");
+                        }}
+                      >
+                        <PencilSimple className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          const supabase = createClient();
+                          const newActive = !ct.is_active;
+                          const { error } = await supabase
+                            .from("consent_types")
+                            .update({ is_active: newActive })
+                            .eq("id", ct.id);
+                          if (error) {
+                            toast.error("Failed to update");
+                          } else {
+                            setConsentTypes(
+                              consentTypes.map((c) =>
+                                c.id === ct.id
+                                  ? { ...c, is_active: newActive }
+                                  : c
+                              )
+                            );
+                            toast.success(
+                              newActive ? "Activated" : "Deactivated"
+                            );
+                          }
+                        }}
+                      >
+                        {ct.is_active ? "Deactivate" : "Activate"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={ct.is_active ? "default" : "outline"}>
-                      {ct.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={async () => {
-                        const supabase = createClient();
-                        const newActive = !ct.is_active;
-                        const { error } = await supabase
-                          .from("consent_types")
-                          .update({ is_active: newActive })
-                          .eq("id", ct.id);
-                        if (error) {
-                          toast.error("Failed to update");
-                        } else {
-                          setConsentTypes(
-                            consentTypes.map((c) =>
-                              c.id === ct.id ? { ...c, is_active: newActive } : c
-                            )
-                          );
-                          toast.success(newActive ? "Activated" : "Deactivated");
-                        }
-                      }}
-                    >
-                      {ct.is_active ? "Deactivate" : "Activate"}
-                    </Button>
-                  </div>
+                  {expandedHistory === ct.id && (
+                    <div className="px-3 pb-3 border-t">
+                      {loadingHistory === ct.id ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                          <CircleNotch className="h-3 w-3 animate-spin" />
+                          Loading history...
+                        </div>
+                      ) : (versionHistory[ct.id] ?? []).length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-2">
+                          No version history yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-1 pt-2">
+                          {(versionHistory[ct.id] ?? []).map((v) => (
+                            <div
+                              key={v.version}
+                              className="flex items-start gap-2 text-xs"
+                            >
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 shrink-0 mt-0.5"
+                              >
+                                v{v.version}
+                              </Badge>
+                              <span className="text-muted-foreground truncate flex-1">
+                                {v.legal_text
+                                  ? v.legal_text.length > 80
+                                    ? v.legal_text.slice(0, 80) + "..."
+                                    : v.legal_text
+                                  : "No legal text"}
+                              </span>
+                              <span className="text-muted-foreground whitespace-nowrap shrink-0">
+                                {new Date(v.created_at).toLocaleDateString(
+                                  "en-US",
+                                  { month: "short", day: "numeric" }
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Consent Type Dialog */}
+      <Dialog
+        open={!!editingConsent}
+        onOpenChange={(v) => {
+          if (!v) setEditingConsent(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit consent type</DialogTitle>
+            <DialogDescription>
+              Changing legal text will create a new version.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Description</Label>
+              <Input
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Legal text</Label>
+              <Textarea
+                value={editLegal}
+                onChange={(e) => setEditLegal(e.target.value)}
+                className="min-h-[80px]"
+              />
+              {editingConsent &&
+                editLegal.trim() !==
+                  (editingConsent.legal_text ?? "") && (
+                  <p className="text-xs text-amber-600">
+                    Legal text changed &mdash; saving will create v
+                    {editingConsent.version + 1}
+                  </p>
+                )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingConsent(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={savingEdit || !editName.trim()}
+            >
+              {savingEdit ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

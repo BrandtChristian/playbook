@@ -17,12 +17,14 @@ export async function renderEmail({
   fromName,
   brandConfig,
   unsubscribeUrl,
+  preferencesUrl,
 }: {
   bodyHtml: string;
   data: Record<string, unknown>;
   fromName?: string;
   brandConfig?: BrandConfig;
   unsubscribeUrl?: string;
+  preferencesUrl?: string;
 }): Promise<string> {
   const renderedBody = await renderTemplate(bodyHtml, data);
 
@@ -32,6 +34,7 @@ export async function renderEmail({
       fromName={fromName || "Your Company"}
       brandConfig={brandConfig}
       unsubscribeUrl={unsubscribeUrl}
+      preferencesUrl={preferencesUrl}
     />
   );
 

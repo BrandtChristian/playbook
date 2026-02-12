@@ -56,7 +56,29 @@ export function ContactsClient({
   const [adding, setAdding] = useState(false);
   const [detailContact, setDetailContact] = useState<Contact | null>(null);
   const [contactConsents, setContactConsents] = useState<
-    { consent_type_id: string; consent_type_name: string; consent_type_desc: string | null; granted: boolean }[]
+    {
+      consent_type_id: string;
+      consent_type_name: string;
+      consent_type_desc: string | null;
+      consent_type_version: number;
+      granted: boolean;
+      source: string | null;
+      granted_at: string | null;
+      revoked_at: string | null;
+      version_at_grant: number | null;
+      ip_address: string | null;
+    }[]
+  >([]);
+  const [auditLog, setAuditLog] = useState<
+    {
+      id: string;
+      consent_type_id: string;
+      action: string;
+      source: string;
+      consent_version: number;
+      ip_address: string | null;
+      created_at: string;
+    }[]
   >([]);
   const [loadingConsents, setLoadingConsents] = useState(false);
   const [savingConsent, setSavingConsent] = useState<string | null>(null);
@@ -112,21 +134,33 @@ export function ContactsClient({
     setLoadingConsents(true);
 
     const supabase = createClient();
-    // Fetch consent types for this org and current consents for this contact
-    const [{ data: types }, { data: consents }] = await Promise.all([
-      supabase.from("consent_types").select("id, name, description").eq("org_id", orgId).eq("is_active", true),
-      supabase.from("contact_consents").select("consent_type_id, granted").eq("contact_id", contact.id),
+    const [{ data: types }, { data: consents }, { data: audit }] = await Promise.all([
+      supabase.from("consent_types").select("id, name, description, version").eq("org_id", orgId).eq("is_active", true),
+      supabase.from("contact_consents").select("consent_type_id, granted, source, granted_at, revoked_at, version_at_grant, ip_address").eq("contact_id", contact.id),
+      supabase.from("consent_audit_log").select("id, consent_type_id, action, source, consent_version, ip_address, created_at").eq("contact_id", contact.id).order("created_at", { ascending: false }).limit(20),
     ]);
 
-    const consentMap = new Map((consents ?? []).map((c) => [c.consent_type_id, c.granted]));
-    setContactConsents(
-      (types ?? []).map((t) => ({
-        consent_type_id: t.id,
-        consent_type_name: t.name,
-        consent_type_desc: t.description,
-        granted: consentMap.get(t.id) ?? false,
-      }))
+    const consentMap = new Map(
+      (consents ?? []).map((c) => [c.consent_type_id, c])
     );
+    setContactConsents(
+      (types ?? []).map((t) => {
+        const existing = consentMap.get(t.id);
+        return {
+          consent_type_id: t.id,
+          consent_type_name: t.name,
+          consent_type_desc: t.description,
+          consent_type_version: t.version,
+          granted: existing?.granted ?? false,
+          source: existing?.source ?? null,
+          granted_at: existing?.granted_at ?? null,
+          revoked_at: existing?.revoked_at ?? null,
+          version_at_grant: existing?.version_at_grant ?? null,
+          ip_address: existing?.ip_address ?? null,
+        };
+      })
+    );
+    setAuditLog(audit ?? []);
     setLoadingConsents(false);
   }
 
@@ -135,6 +169,10 @@ export function ContactsClient({
     setSavingConsent(consentTypeId);
 
     const supabase = createClient();
+    const cc = contactConsents.find((c) => c.consent_type_id === consentTypeId);
+    const currentVersion = cc?.consent_type_version ?? 1;
+    const now = new Date().toISOString();
+
     const { error } = await supabase
       .from("contact_consents")
       .upsert(
@@ -142,20 +180,55 @@ export function ContactsClient({
           contact_id: detailContact.id,
           consent_type_id: consentTypeId,
           granted,
-          granted_at: granted ? new Date().toISOString() : null,
-          revoked_at: granted ? null : new Date().toISOString(),
+          granted_at: granted ? now : null,
+          revoked_at: granted ? null : now,
           source: "admin",
+          version_at_grant: currentVersion,
         },
         { onConflict: "contact_id,consent_type_id" }
       );
+
+    if (!error) {
+      await supabase.from("consent_audit_log").insert({
+        org_id: orgId,
+        contact_id: detailContact.id,
+        consent_type_id: consentTypeId,
+        action: granted ? "granted" : "revoked",
+        source: "admin",
+        consent_version: currentVersion,
+      });
+    }
 
     setSavingConsent(null);
     if (error) {
       toast.error("Failed to update consent");
     } else {
       setContactConsents((prev) =>
-        prev.map((c) => (c.consent_type_id === consentTypeId ? { ...c, granted } : c))
+        prev.map((c) =>
+          c.consent_type_id === consentTypeId
+            ? {
+                ...c,
+                granted,
+                source: "admin",
+                granted_at: granted ? now : c.granted_at,
+                revoked_at: granted ? null : now,
+                version_at_grant: currentVersion,
+              }
+            : c
+        )
       );
+      setAuditLog((prev) => [
+        {
+          id: crypto.randomUUID(),
+          consent_type_id: consentTypeId,
+          action: granted ? "granted" : "revoked",
+          source: "admin",
+          consent_version: currentVersion,
+          ip_address: null,
+          created_at: now,
+        },
+        ...prev,
+      ]);
       toast.success(granted ? "Consent granted" : "Consent revoked");
     }
   }
@@ -339,26 +412,116 @@ export function ContactsClient({
                 ) : contactConsents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No consent types configured.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {contactConsents.map((cc) => (
-                      <div key={cc.consent_type_id} className="flex items-start gap-3 p-3 rounded-md border">
-                        <Checkbox
-                          checked={cc.granted}
-                          disabled={savingConsent === cc.consent_type_id}
-                          onCheckedChange={(checked) => toggleConsent(cc.consent_type_id, !!checked)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium leading-none">{cc.consent_type_name}</p>
-                          {cc.consent_type_desc && (
-                            <p className="text-xs text-muted-foreground mt-1">{cc.consent_type_desc}</p>
-                          )}
+                  <>
+                    <div className="space-y-2">
+                      {contactConsents.map((cc) => (
+                        <div key={cc.consent_type_id} className="p-3 rounded-md border">
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={cc.granted}
+                              disabled={savingConsent === cc.consent_type_id}
+                              onCheckedChange={(checked) => toggleConsent(cc.consent_type_id, !!checked)}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium leading-none">{cc.consent_type_name}</p>
+                                <Badge variant={cc.granted ? "default" : "outline"} className="shrink-0 text-xs">
+                                  {cc.granted ? "Granted" : "Revoked"}
+                                </Badge>
+                              </div>
+                              {cc.consent_type_desc && (
+                                <p className="text-xs text-muted-foreground mt-1">{cc.consent_type_desc}</p>
+                              )}
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {cc.source && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {cc.source === "preference_center"
+                                      ? "Preference Center"
+                                      : cc.source === "admin"
+                                        ? "Admin"
+                                        : cc.source}
+                                  </Badge>
+                                )}
+                                {(cc.granted_at || cc.revoked_at) && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {new Date(
+                                      cc.granted ? cc.granted_at! : cc.revoked_at!
+                                    ).toLocaleDateString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })}
+                                  </span>
+                                )}
+                                {cc.version_at_grant != null && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    v{cc.version_at_grant}
+                                  </span>
+                                )}
+                                {cc.ip_address && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {cc.ip_address}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <Badge variant={cc.granted ? "default" : "outline"} className="shrink-0">
-                          {cc.granted ? "Granted" : "Revoked"}
-                        </Badge>
+                      ))}
+                    </div>
+
+                    {auditLog.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Consent History
+                        </p>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {auditLog.map((entry) => {
+                            const typeName =
+                              contactConsents.find(
+                                (c) => c.consent_type_id === entry.consent_type_id
+                              )?.consent_type_name ?? "Unknown";
+                            return (
+                              <div
+                                key={entry.id}
+                                className="flex items-center gap-2 text-xs text-muted-foreground"
+                              >
+                                <span
+                                  className={
+                                    entry.action === "granted"
+                                      ? "text-green-600 dark:text-green-400 font-mono"
+                                      : "text-red-500 dark:text-red-400 font-mono"
+                                  }
+                                >
+                                  {entry.action === "granted" ? "+" : "\u2212"}
+                                </span>
+                                <span className="font-medium text-foreground">
+                                  {typeName}
+                                </span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  {entry.source === "preference_center"
+                                    ? "Pref Center"
+                                    : entry.source}
+                                </Badge>
+                                <span>v{entry.consent_version}</span>
+                                <span className="ml-auto whitespace-nowrap">
+                                  {new Date(entry.created_at).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
                 )}
               </div>
             </>

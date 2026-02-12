@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
     try {
       // Look up or create preference token for this contact
       let unsubscribeUrl: string | undefined;
+      let preferencesUrl: string | undefined;
       const { data: existingToken } = await supabase
         .from("preference_tokens")
         .select("token")
@@ -129,17 +130,20 @@ export async function POST(request: NextRequest) {
         .eq("org_id", campaign.org_id)
         .single();
 
-      if (existingToken) {
-        unsubscribeUrl = `${appUrl}/preferences/${existingToken.token}`;
-      } else {
+      const tokenValue = existingToken?.token;
+      if (!tokenValue) {
         const { data: newToken } = await supabase
           .from("preference_tokens")
           .insert({ contact_id: contact.id, org_id: campaign.org_id })
           .select("token")
           .single();
         if (newToken) {
-          unsubscribeUrl = `${appUrl}/preferences/${newToken.token}`;
+          unsubscribeUrl = `${appUrl}/unsubscribe/${newToken.token}`;
+          preferencesUrl = `${appUrl}/preferences/${newToken.token}`;
         }
+      } else {
+        unsubscribeUrl = `${appUrl}/unsubscribe/${tokenValue}`;
+        preferencesUrl = `${appUrl}/preferences/${tokenValue}`;
       }
 
       const renderedSubject = await renderTemplate(
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
         fromName: org.from_name || undefined,
         brandConfig,
         unsubscribeUrl,
+        preferencesUrl,
       });
 
       const { error: sendError } = await resend.emails.send({
@@ -163,6 +168,12 @@ export async function POST(request: NextRequest) {
         to: [contact.email],
         subject: renderedSubject,
         html,
+        headers: preferencesUrl
+          ? {
+              "List-Unsubscribe": `<${preferencesUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
+          : undefined,
       });
 
       if (sendError) {

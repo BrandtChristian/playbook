@@ -36,7 +36,7 @@ export default async function PreferencePage({
   ] = await Promise.all([
     supabase.from("contacts").select("email").eq("id", prefToken.contact_id).single(),
     supabase.from("organizations").select("name, brand_config").eq("id", prefToken.org_id).single(),
-    supabase.from("consent_types").select("id, name, description").eq("org_id", prefToken.org_id).eq("is_active", true),
+    supabase.from("consent_types").select("id, name, description, legal_text, version").eq("org_id", prefToken.org_id).eq("is_active", true),
     supabase.from("contact_consents").select("consent_type_id, granted").eq("contact_id", prefToken.contact_id),
   ]);
 

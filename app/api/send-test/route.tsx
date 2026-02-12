@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getResendClient, renderTestEmail } from "@/lib/resend";
+import { getResendClient, renderTestEmail, renderEmail } from "@/lib/resend";
 import { renderTemplate, sampleData } from "@/lib/liquid";
 
 export async function POST(request: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { subject, bodyHtml, to } = await request.json();
+  const { subject, bodyHtml, to, realLinks } = await request.json();
 
   if (!subject || !bodyHtml || !to) {
     return NextResponse.json(
@@ -48,16 +48,84 @@ export async function POST(request: NextRequest) {
   // Render subject with sample data
   const renderedSubject = await renderTemplate(subject, sampleData);
 
-  // Render body with sample data + base layout
   const brandConfig = (org.brand_config && typeof org.brand_config === "object" && Object.keys(org.brand_config).length > 0)
     ? (org.brand_config as Record<string, string>)
     : undefined;
 
-  const html = await renderTestEmail({
-    bodyHtml,
-    fromName: org.from_name || undefined,
-    brandConfig,
-  });
+  let html: string;
+
+  if (realLinks) {
+    // Find or create a contact for the test email address
+    const { data: existingContact } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("org_id", profile.org_id)
+      .eq("email", to)
+      .single();
+
+    let contactId: string;
+    if (existingContact) {
+      contactId = existingContact.id;
+    } else {
+      const { data: newContact, error: contactErr } = await supabase
+        .from("contacts")
+        .insert({ org_id: profile.org_id, email: to, first_name: "Test" })
+        .select("id")
+        .single();
+      if (contactErr || !newContact) {
+        return NextResponse.json(
+          { error: "Failed to create test contact" },
+          { status: 500 }
+        );
+      }
+      contactId = newContact.id;
+    }
+
+    // Find or create a preference token
+    const { data: existingToken } = await supabase
+      .from("preference_tokens")
+      .select("token")
+      .eq("contact_id", contactId)
+      .eq("org_id", profile.org_id)
+      .single();
+
+    let tokenValue: string;
+    if (existingToken) {
+      tokenValue = existingToken.token;
+    } else {
+      const { data: newToken, error: tokenErr } = await supabase
+        .from("preference_tokens")
+        .insert({ contact_id: contactId, org_id: profile.org_id })
+        .select("token")
+        .single();
+      if (tokenErr || !newToken) {
+        return NextResponse.json(
+          { error: "Failed to create preference token" },
+          { status: 500 }
+        );
+      }
+      tokenValue = newToken.token;
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+
+    html = await renderEmail({
+      bodyHtml,
+      data: sampleData,
+      fromName: org.from_name || undefined,
+      brandConfig,
+      unsubscribeUrl: `${appUrl}/unsubscribe/${tokenValue}`,
+      preferencesUrl: `${appUrl}/preferences/${tokenValue}`,
+    });
+  } else {
+    html = await renderTestEmail({
+      bodyHtml,
+      fromName: org.from_name || undefined,
+      brandConfig,
+    });
+  }
 
   const resend = getResendClient(org.resend_api_key);
   const safeName = org.from_name?.replace(/[\r\n]/g, "") || "";
@@ -79,5 +147,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ id: data?.id, message: "Test email sent" });
+  return NextResponse.json({
+    id: data?.id,
+    message: realLinks
+      ? "Test email sent with real unsubscribe/preference links"
+      : "Test email sent",
+  });
 }

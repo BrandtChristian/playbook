@@ -11,6 +11,8 @@ type ConsentType = {
   id: string;
   name: string;
   description: string | null;
+  legal_text: string | null;
+  version: number;
 };
 
 type ConsentRecord = {
@@ -25,6 +27,7 @@ export function PreferenceCenter({
   brandConfig,
   consentTypes,
   currentConsents,
+  readOnly = false,
 }: {
   token: string;
   contactEmail: string;
@@ -32,6 +35,7 @@ export function PreferenceCenter({
   brandConfig?: { primary_color?: string; header_bg_color?: string } | null;
   consentTypes: ConsentType[];
   currentConsents: ConsentRecord[];
+  readOnly?: boolean;
 }) {
   const [consents, setConsents] = useState<Record<string, boolean>>(() => {
     const map: Record<string, boolean> = {};
@@ -103,6 +107,11 @@ export function PreferenceCenter({
         {/* Content */}
         <Card className="rounded-t-none">
           <CardHeader>
+            {readOnly && (
+              <div className="text-xs font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-3 py-1.5 rounded-md mb-2">
+                Preview mode &mdash; this is what contacts see
+              </div>
+            )}
             <CardTitle className="text-base">Email Preferences</CardTitle>
             <p className="text-sm text-muted-foreground">
               Manage your email preferences for <strong>{contactEmail}</strong>
@@ -126,6 +135,16 @@ export function PreferenceCenter({
                       {ct.description}
                     </p>
                   )}
+                  {ct.legal_text && (
+                    <details className="mt-1">
+                      <summary className="text-xs text-muted-foreground cursor-pointer hover:underline">
+                        View legal terms
+                      </summary>
+                      <p className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-muted whitespace-pre-wrap">
+                        {ct.legal_text}
+                      </p>
+                    </details>
+                  )}
                 </div>
               </label>
             ))}
@@ -133,7 +152,7 @@ export function PreferenceCenter({
             <div className="flex flex-col gap-2 pt-2">
               <Button
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || readOnly}
                 style={{ backgroundColor: primaryColor }}
               >
                 {saving ? (
@@ -149,6 +168,7 @@ export function PreferenceCenter({
                 size="sm"
                 className="text-muted-foreground"
                 onClick={handleUnsubscribeAll}
+                disabled={readOnly}
               >
                 Unsubscribe from all
               </Button>

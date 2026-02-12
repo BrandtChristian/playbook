@@ -27,6 +27,7 @@ interface BaseLayoutProps {
   bodyHtml: string;
   fromName?: string;
   unsubscribeUrl?: string;
+  preferencesUrl?: string;
   brandConfig?: BrandConfig;
 }
 
@@ -35,8 +36,10 @@ export function BaseEmailLayout({
   bodyHtml,
   fromName = "Your Company",
   unsubscribeUrl = "{{{ UNSUBSCRIBE_URL }}}",
+  preferencesUrl,
   brandConfig,
 }: BaseLayoutProps) {
+  const manageUrl = preferencesUrl || unsubscribeUrl;
   const bc = brandConfig || {};
   const headerBg = bc.header_bg_color || "#ffffff";
   const headerTextColor = isLightColor(headerBg) ? "#1a1a1a" : "#ffffff";
@@ -97,8 +100,8 @@ export function BaseEmailLayout({
               <Link href={unsubscribeUrl} style={{ ...unsubscribeLink, color: primaryColor }}>
                 Unsubscribe
               </Link>
-              {" · "}
-              <Link href={unsubscribeUrl} style={{ ...unsubscribeLink, color: primaryColor }}>
+              {" \u00B7 "}
+              <Link href={manageUrl} style={{ ...unsubscribeLink, color: primaryColor }}>
                 Manage preferences
               </Link>
             </Text>

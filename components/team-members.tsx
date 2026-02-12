@@ -55,6 +55,8 @@ type Member = {
   full_name: string | null;
   avatar_url: string | null;
   role: "owner" | "admin" | "member";
+  job_title: string | null;
+  preferred_test_email: string | null;
   created_at: string;
 };
 
@@ -129,6 +131,12 @@ export function TeamMembers({
   const [accessSaving, setAccessSaving] = useState(false);
   const [unrestricted, setUnrestricted] = useState(true);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<Set<string>>(new Set());
+  const [detailMember, setDetailMember] = useState<Member | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailName, setDetailName] = useState("");
+  const [detailJobTitle, setDetailJobTitle] = useState("");
+  const [detailTestEmail, setDetailTestEmail] = useState("");
+  const [detailSaving, setDetailSaving] = useState(false);
   const router = useRouter();
   const isOwner = currentUserRole === "owner";
   const isAdmin = currentUserRole === "owner" || currentUserRole === "admin";
@@ -294,6 +302,43 @@ export function TeamMembers({
     }
   }
 
+  function openDetailDialog(member: Member) {
+    setDetailMember(member);
+    setDetailName(member.full_name || "");
+    setDetailJobTitle(member.job_title || "");
+    setDetailTestEmail(member.preferred_test_email || "");
+    setDetailOpen(true);
+  }
+
+  async function handleSaveDetail() {
+    if (!detailMember) return;
+    setDetailSaving(true);
+    const supabase = createClient();
+    const updates = {
+      full_name: detailName.trim() || null,
+      job_title: detailJobTitle.trim() || null,
+      preferred_test_email: detailTestEmail.trim() || null,
+    };
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", detailMember.id);
+
+    setDetailSaving(false);
+    if (error) {
+      toast.error("Failed to update profile");
+      return;
+    }
+
+    setMembers(
+      members.map((m) =>
+        m.id === detailMember.id ? { ...m, ...updates } : m
+      )
+    );
+    toast.success("Profile updated");
+    setDetailOpen(false);
+  }
+
   function toggleSegment(segmentId: string) {
     setSelectedSegmentIds((prev) => {
       const next = new Set(prev);
@@ -386,10 +431,15 @@ export function TeamMembers({
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {members.map((member) => (
+          {members.map((member) => {
+            const canViewDetail =
+              isAdmin && member.id !== currentUserId;
+
+            return (
             <div
               key={member.id}
-              className="flex items-center justify-between p-3 border"
+              className={`flex items-center justify-between p-3 border${canViewDetail ? " cursor-pointer hover:bg-muted/50 transition-colors" : ""}`}
+              onClick={canViewDetail ? () => openDetailDialog(member) : undefined}
             >
               <div className="flex items-center gap-3">
                 <Avatar className="h-8 w-8">
@@ -405,9 +455,15 @@ export function TeamMembers({
                       <span className="text-muted-foreground ml-1">(you)</span>
                     )}
                   </p>
+                  {member.job_title && (
+                    <p className="text-xs text-muted-foreground">
+                      {member.job_title}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 {isOwner &&
                 member.id !== currentUserId &&
                 member.role !== "owner" ? (
@@ -476,7 +532,8 @@ export function TeamMembers({
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
           {members.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">
               No team members yet.
@@ -484,6 +541,75 @@ export function TeamMembers({
           )}
         </div>
       </CardContent>
+
+      {/* Member Detail Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={detailMember?.avatar_url || undefined} />
+                <AvatarFallback>
+                  {getInitials(detailMember?.full_name ?? null)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <DialogTitle>
+                  {detailMember?.full_name || "Unnamed"}
+                </DialogTitle>
+                <DialogDescription className="flex items-center gap-2 mt-0.5">
+                  {detailMember && roleBadge(detailMember.role)}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="detail-name">Full name</Label>
+              <Input
+                id="detail-name"
+                value={detailName}
+                onChange={(e) => setDetailName(e.target.value)}
+                placeholder="Jane Smith"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="detail-job">Job title</Label>
+              <Input
+                id="detail-job"
+                value={detailJobTitle}
+                onChange={(e) => setDetailJobTitle(e.target.value)}
+                placeholder="Marketing Manager"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="detail-email">Preferred test email</Label>
+              <Input
+                id="detail-email"
+                type="email"
+                value={detailTestEmail}
+                onChange={(e) => setDetailTestEmail(e.target.value)}
+                placeholder="you@company.com"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button disabled={detailSaving} onClick={handleSaveDetail}>
+              {detailSaving ? (
+                <>
+                  <CircleNotch className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Segment Access Dialog */}
       <Dialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen}>

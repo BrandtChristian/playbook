@@ -34,12 +34,13 @@ export async function POST(request: NextRequest) {
       fromName={fromName || "Your Company"}
       previewText={previewText}
       unsubscribeUrl="#"
+      preferencesUrl="#"
       brandConfig={brandConfig}
     />
   );
 
   // Inject ResizeObserver script so the parent iframe auto-sizes
-  const heightScript = `<script>new ResizeObserver(()=>{window.parent.postMessage({type:'preview-height',height:document.body.scrollHeight},window.location.origin)}).observe(document.body)</script>`;
+  const heightScript = `<script>new ResizeObserver(()=>{window.parent.postMessage({type:'preview-height',height:document.body.scrollHeight},'*')}).observe(document.body)</script>`;
 
   return NextResponse.json({ html: html + heightScript });
 }

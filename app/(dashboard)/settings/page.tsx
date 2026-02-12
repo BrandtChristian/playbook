@@ -11,13 +11,13 @@ export default async function SettingsPage() {
 
   const { data: consentTypes } = await supabase
     .from("consent_types")
-    .select("id, name, description, legal_text, is_active")
+    .select("id, name, description, legal_text, is_active, version")
     .eq("org_id", user.organizations.id)
     .order("created_at", { ascending: true });
 
   const { data: members } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url, role, created_at")
+    .select("id, full_name, avatar_url, role, job_title, preferred_test_email, created_at")
     .eq("org_id", user.organizations.id)
     .order("created_at", { ascending: true });
 

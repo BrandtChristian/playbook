@@ -43,9 +43,20 @@ export async function PUT(request: NextRequest) {
     request.headers.get("x-real-ip") ||
     "unknown";
 
-  // Upsert each consent
+  // Fetch current consent type versions for audit tracking
+  const { data: consentTypesData } = await supabase
+    .from("consent_types")
+    .select("id, version")
+    .eq("org_id", prefToken.org_id);
+  const versionMap = new Map(
+    (consentTypesData ?? []).map((ct) => [ct.id, ct.version as number])
+  );
+
+  // Upsert each consent and write audit log
   for (const consent of consents) {
     const now = new Date().toISOString();
+    const version = versionMap.get(consent.consent_type_id) ?? 1;
+
     await supabase.from("contact_consents").upsert(
       {
         contact_id: prefToken.contact_id,
@@ -55,9 +66,20 @@ export async function PUT(request: NextRequest) {
         revoked_at: consent.granted ? null : now,
         ip_address: ip,
         source: "preference_center",
+        version_at_grant: version,
       },
       { onConflict: "contact_id,consent_type_id" }
     );
+
+    await supabase.from("consent_audit_log").insert({
+      org_id: prefToken.org_id,
+      contact_id: prefToken.contact_id,
+      consent_type_id: consent.consent_type_id,
+      action: consent.granted ? "granted" : "revoked",
+      source: "preference_center",
+      ip_address: ip,
+      consent_version: version,
+    });
   }
 
   // If all consents revoked, mark contact as unsubscribed

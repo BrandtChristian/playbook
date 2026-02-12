@@ -82,11 +82,30 @@ export function TemplateEditor({
   const [saving, setSaving] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewHeight, setPreviewHeight] = useState(460);
+  const [previewHeight, setPreviewHeight] = useState(600);
   const [testEmail, setTestEmail] = useState("");
   const [showTestForm, setShowTestForm] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [realLinks, setRealLinks] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+
+  // Pre-fill test email from user's preferred test email
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      supabase
+        .from("profiles")
+        .select("preferred_test_email")
+        .eq("id", data.user.id)
+        .single()
+        .then(({ data: profile }) => {
+          if (profile?.preferred_test_email) {
+            setTestEmail(profile.preferred_test_email);
+          }
+        });
+    });
+  }, []);
 
   // Track last-saved values for dirty detection
   const savedRef = useRef({ name: template.name, subject: template.subject, bodyHtml: template.body_html });
@@ -100,7 +119,7 @@ export function TemplateEditor({
         e.data?.type === "preview-height" &&
         typeof e.data.height === "number"
       ) {
-        setPreviewHeight(Math.max(460, e.data.height + 16));
+        setPreviewHeight(Math.max(200, e.data.height + 16));
       }
     }
     window.addEventListener("message", handleMessage);
@@ -218,6 +237,7 @@ export function TemplateEditor({
           subject,
           bodyHtml,
           to: testEmail.trim(),
+          realLinks,
         }),
       });
       const json = await res.json();
@@ -415,6 +435,18 @@ export function TemplateEditor({
                 }}
                 autoFocus
               />
+              <button
+                type="button"
+                onClick={() => setRealLinks(!realLinks)}
+                className={`h-8 px-2 text-[10px] font-medium border rounded-sm whitespace-nowrap transition-colors ${
+                  realLinks
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-transparent text-muted-foreground border-input hover:bg-muted"
+                }`}
+                title="Include working unsubscribe and preference center links"
+              >
+                Real links
+              </button>
               <Button
                 size="sm"
                 onClick={handleSendTest}
@@ -507,7 +539,7 @@ export function TemplateEditor({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[1fr_1fr] min-h-[500px]">
+      <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
         <div className="space-y-4">
           <Tabs
             value={editorMode}
@@ -571,7 +603,7 @@ export function TemplateEditor({
           </div>
 
           {/* Device frame */}
-          <div className="sticky top-4">
+          <div>
             <div className="bg-stone-800 p-3 pb-0 shadow-xl shadow-stone-900/20">
               {/* Browser chrome bar */}
               <div className="flex items-center gap-1.5 pb-2.5">
@@ -596,7 +628,7 @@ export function TemplateEditor({
                     title="Email preview"
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center min-h-[460px] text-sm text-stone-400 gap-2">
+                  <div className="flex flex-col items-center justify-center min-h-[200px] text-sm text-stone-400 gap-2">
                     <Eye className="h-6 w-6 text-stone-300 dark:text-stone-600" />
                     {loadingPreview
                       ? "Rendering..."

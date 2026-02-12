@@ -188,6 +188,7 @@ export function CampaignsClient({
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [testTo, setTestTo] = useState(userEmail);
+  const [realLinks, setRealLinks] = useState(false);
 
   const router = useRouter();
 
@@ -249,6 +250,7 @@ export function CampaignsClient({
           subject: selectedCampaign.subject,
           bodyHtml: selectedCampaign.body_html,
           to: testTo,
+          realLinks,
         }),
       });
       const json = await res.json();
@@ -458,6 +460,17 @@ export function CampaignsClient({
                         )}
                       </Button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setRealLinks(!realLinks)}
+                      className={`text-xs px-2 py-1 border rounded-sm transition-colors w-fit ${
+                        realLinks
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-input hover:bg-muted"
+                      }`}
+                    >
+                      Include real unsub/preference links
+                    </button>
                   </div>
 
                   {/* Send to segment */}
