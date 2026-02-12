@@ -7,12 +7,17 @@ import type { EmailBlock } from "@/lib/email/blocks";
 
 type AiMode = "generate" | "fill" | "improve";
 
+const IMPROVABLE_TYPES = new Set(["heading", "text", "button"]);
+
 function getMode(
   blocks: EmailBlock[],
   selectedBlockId: string | null
 ): AiMode {
-  if (selectedBlockId && blocks.find((b) => b.id === selectedBlockId)) {
-    return "improve";
+  if (selectedBlockId) {
+    const block = blocks.find((b) => b.id === selectedBlockId);
+    if (block && IMPROVABLE_TYPES.has(block.type)) {
+      return "improve";
+    }
   }
   if (blocks.length > 0) return "fill";
   return "generate";
