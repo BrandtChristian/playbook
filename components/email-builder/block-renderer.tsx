@@ -310,7 +310,13 @@ function ImageRenderer({
       />
 
       {block.src ? (
-        <div className="relative" style={{ maxWidth: block.maxWidth ? `${block.maxWidth}px` : "100%" }}>
+        <div
+          className="relative group inline-block"
+          style={{
+            maxWidth: block.maxWidth ? `${block.maxWidth}px` : "100%",
+            width: block.width && block.width < 100 ? `${block.width}%` : "100%",
+          }}
+        >
           {!block.alt?.trim() && (
             <span className="absolute top-1 left-1 z-10 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 leading-none">
               Missing alt text
@@ -319,8 +325,13 @@ function ImageRenderer({
           <img
             src={block.src}
             alt={block.alt}
-            className="w-full h-auto block"
+            className={`max-h-[300px] w-auto max-w-full h-auto block object-contain ${
+              block.align === "center" ? "mx-auto" : block.align === "right" ? "ml-auto" : ""
+            }`}
           />
+          <span className="absolute bottom-1 right-1 z-10 bg-black/60 text-white text-[9px] px-1.5 py-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            {block.width && block.width < 100 ? `${block.width}%` : ""}{block.width && block.width < 100 && block.maxWidth ? " · " : ""}{block.maxWidth ? `max ${block.maxWidth}px` : ""}
+          </span>
         </div>
       ) : showLibrary ? (
         /* Asset library browser */

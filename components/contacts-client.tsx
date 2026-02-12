@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Plus, Trash, ShieldCheck, CircleNotch } from "@phosphor-icons/react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CsvImportDialog } from "@/components/csv-import-dialog";
+import type { CustomFieldDefinition } from "@/lib/segments/types";
 
 type Contact = {
   id: string;
@@ -32,15 +33,18 @@ type Contact = {
   address_city: string | null;
   address_country: string | null;
   unsubscribed: boolean;
+  data: Record<string, unknown> | null;
   created_at: string;
 };
 
 export function ContactsClient({
   contacts: initialContacts,
   orgId,
+  customFields = [],
 }: {
   contacts: Contact[];
   orgId: string;
+  customFields?: CustomFieldDefinition[];
 }) {
   const [contacts, setContacts] = useState(initialContacts);
   const [email, setEmail] = useState("");
@@ -303,6 +307,23 @@ export function ContactsClient({
                   </p>
                 </div>
               </div>
+
+              {customFields.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <p className="text-sm font-medium text-muted-foreground">Custom Fields</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    {customFields.map((field) => {
+                      const val = detailContact.data?.[field.name];
+                      return (
+                        <div key={field.id}>
+                          <span className="text-muted-foreground">{field.label}</span>
+                          <p className="font-medium">{val != null && val !== "" ? String(val) : "—"}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-2">

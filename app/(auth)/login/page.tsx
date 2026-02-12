@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isEmailAllowed, allowedDomains } from "@/lib/allowed-domains";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,6 +21,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!isEmailAllowed(email)) {
+      setError(
+        `Access is restricted to ${allowedDomains.join(", ")} email addresses.`
+      );
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { anthropic } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,6 +13,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { allowed } = checkRateLimit(user.id);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
+  }
+
   const { imageUrl } = await request.json();
 
   if (!imageUrl) {
@@ -19,6 +28,35 @@ export async function POST(request: Request) {
       { error: "imageUrl is required" },
       { status: 400 }
     );
+  }
+
+  // SSRF protection: only allow public HTTPS URLs
+  try {
+    const parsed = new URL(imageUrl);
+    if (parsed.protocol !== "https:") {
+      return NextResponse.json(
+        { error: "Only HTTPS URLs are allowed" },
+        { status: 400 }
+      );
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === "localhost" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("169.254.") ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      hostname.endsWith(".internal") ||
+      hostname === "[::1]"
+    ) {
+      return NextResponse.json(
+        { error: "Private/reserved URLs are not allowed" },
+        { status: 400 }
+      );
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
   try {

@@ -228,7 +228,22 @@ function ImageEditor({
         )}
       </div>
 
-      {/* Max width */}
+      {/* Width & Max width */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Width (%)</Label>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={10}
+            max={100}
+            step={5}
+            value={localBlock.width ?? 100}
+            onChange={(e) => update({ width: parseInt(e.target.value) })}
+            className="flex-1 h-1 accent-indigo-500"
+          />
+          <span className="text-sm text-stone-500 dark:text-stone-400 w-8 text-right tabular-nums">{localBlock.width ?? 100}%</span>
+        </div>
+      </div>
       <div className="flex gap-4">
         <div className="space-y-1.5 flex-1">
           <Label className="text-xs">Max Width (px)</Label>

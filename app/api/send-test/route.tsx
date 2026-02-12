@@ -60,8 +60,9 @@ export async function POST(request: NextRequest) {
   });
 
   const resend = getResendClient(org.resend_api_key);
-  const from = org.from_name
-    ? `${org.from_name} <${org.from_email}>`
+  const safeName = org.from_name?.replace(/[\r\n]/g, "") || "";
+  const from = safeName
+    ? `${safeName} <${org.from_email}>`
     : org.from_email;
 
   const { data, error } = await resend.emails.send({

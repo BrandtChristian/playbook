@@ -10,6 +10,7 @@ import {
   Gear,
   ListDashes,
   Lightning,
+  Database,
 } from "@phosphor-icons/react";
 import {
   Sidebar,
@@ -32,6 +33,7 @@ const navItems = [
   { title: "Templates", href: "/templates", icon: EnvelopeSimple },
   { title: "Contacts", href: "/contacts", icon: Users },
   { title: "Segments", href: "/segments", icon: ListDashes },
+  { title: "Data", href: "/data", icon: Database },
 ];
 
 const settingsItems = [

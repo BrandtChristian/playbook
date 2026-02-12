@@ -387,6 +387,23 @@ function ImageProperties({
         )}
       </div>
       <div className="flex items-center gap-1.5">
+        <Label className="text-[10px] text-stone-500 dark:text-stone-400 whitespace-nowrap">Width</Label>
+        <input
+          type="range"
+          min={10}
+          max={100}
+          step={5}
+          value={block.width ?? 100}
+          onChange={(e) =>
+            onUpdate({ ...block, width: parseInt(e.target.value) })
+          }
+          className="w-20 h-1 accent-indigo-500"
+        />
+        <span className="text-[10px] text-stone-500 dark:text-stone-400 w-7 text-right tabular-nums">
+          {block.width ?? 100}%
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
         <Label className="text-[10px] text-stone-500 dark:text-stone-400 whitespace-nowrap">Max W</Label>
         <Input
           type="number"

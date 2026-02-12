@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getResendClient, renderEmail } from "@/lib/resend";
 import { renderTemplate } from "@/lib/liquid";
+import { getContactsForSegment } from "@/lib/segments/evaluate";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -67,45 +68,36 @@ export async function POST(request: NextRequest) {
     .update({ status: "sending" })
     .eq("id", campaignId);
 
-  // Fetch contacts in the segment
-  const { data: segmentContacts } = await supabase
-    .from("segment_contacts")
-    .select("contact_id")
-    .eq("segment_id", campaign.segment_id);
+  // Resolve contacts for this segment (supports both static and dynamic segments)
+  let contacts;
+  try {
+    contacts = await getContactsForSegment(supabase, campaign.segment_id);
+  } catch {
+    await supabase
+      .from("campaigns")
+      .update({ status: "failed", stats: { error: "Failed to resolve segment" } })
+      .eq("id", campaignId);
+    return NextResponse.json(
+      { error: "Failed to resolve segment contacts" },
+      { status: 500 }
+    );
+  }
 
-  const contactIds = (segmentContacts ?? []).map((sc) => sc.contact_id);
-
-  if (contactIds.length === 0) {
+  if (!contacts || contacts.length === 0) {
     await supabase
       .from("campaigns")
       .update({ status: "failed", stats: { error: "No contacts in segment" } })
       .eq("id", campaignId);
     return NextResponse.json(
-      { error: "No contacts in the target segment" },
-      { status: 400 }
-    );
-  }
-
-  const { data: contacts } = await supabase
-    .from("contacts")
-    .select("*")
-    .in("id", contactIds)
-    .eq("unsubscribed", false);
-
-  if (!contacts || contacts.length === 0) {
-    await supabase
-      .from("campaigns")
-      .update({ status: "failed", stats: { error: "All contacts unsubscribed" } })
-      .eq("id", campaignId);
-    return NextResponse.json(
-      { error: "No active contacts in segment" },
+      { error: "No active contacts in the target segment" },
       { status: 400 }
     );
   }
 
   const resend = getResendClient(org.resend_api_key);
-  const from = org.from_name
-    ? `${org.from_name} <${org.from_email}>`
+  const safeName = org.from_name?.replace(/[\r\n]/g, "") || "";
+  const from = safeName
+    ? `${safeName} <${org.from_email}>`
     : org.from_email;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL

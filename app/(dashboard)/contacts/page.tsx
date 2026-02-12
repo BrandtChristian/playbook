@@ -7,16 +7,25 @@ import { ContactsClient } from "@/components/contacts-client";
 export default async function ContactsPage() {
   const user = await getCurrentUser();
   const supabase = await createClient();
+  const orgId = user.organizations.id;
 
-  const { data: contacts } = await supabase
-    .from("contacts")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const [{ data: contacts }, { data: customFields }] = await Promise.all([
+    supabase
+      .from("contacts")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("custom_field_definitions")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   return (
     <ContactsClient
       contacts={contacts ?? []}
-      orgId={user.organizations.id}
+      orgId={orgId}
+      customFields={customFields ?? []}
     />
   );
 }

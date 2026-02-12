@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { anthropic } from "@/lib/ai";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const BRAND_SYSTEM_PROMPT = `You are a brand identity designer for email marketing templates.
 Given a company description, generate a cohesive email brand configuration.
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { allowed } = checkRateLimit(user.id);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429 }
+    );
   }
 
   const {
