@@ -9,11 +9,11 @@ This is a **5-day hackathon project** (Anthropic hackathon). Speed and demo-read
 1. **Read `PROJECT_PLAN.md`** — it contains the full sprint plan with day-by-day status (all 5 days DONE). Check the directory structure and database sections to understand the full scope.
 2. **Check `git log --oneline -5`** — see what was just shipped so you don't duplicate or regress recent work.
 3. **Read `LEARNINGS.md`** — accumulated debugging knowledge and gotchas.
-4. **Understand the demo narrative**: "Small business signs up -> platform shows playbooks -> AI helps write content -> sending emails in minutes, not days." Every change should serve this story.
+4. **Understand the demo narrative**: "Small business signs up -> creates a flow from a template -> AI helps write content -> sending emails in minutes, not days." Every change should serve this story.
 
 ### Priorities
 
-- **Don't break what works**: All 5 days of features are built and working (auth -> onboarding -> contacts -> templates -> email builder -> playbooks -> AI -> campaigns -> send -> team -> segments -> data management -> preferences).
+- **Don't break what works**: All 6 days of features are built and working (auth -> onboarding -> contacts -> templates -> email builder -> flows -> AI -> campaigns -> send -> team -> segments -> data management -> preferences).
 - **Vercel deployment**: The app deploys to Vercel. Run `npm run build` to catch errors before suggesting changes are done — there are no tests, so the build is the safety net.
 - **Supabase MCP**: Database schema changes and seed data are applied via the Supabase MCP tools (not local CLI). 5 migration files in `supabase/migrations/` + 12 more applied directly through MCP.
 
@@ -87,9 +87,9 @@ Marketing automation platform built on **Next.js 16 (App Router) + React 19 + Su
 - **Inline email workflow** — From Send Email node properties: select existing email, create new email from template, or edit selected email (opens full TemplateEditor overlay).
 - **Types** — `lib/flows/types.ts` (FlowNode, Flow, TriggerConfig, SendEmailConfig, NODE_PALETTE, summarizeNode).
 
-### Playbook System
+### Flow Templates (formerly Playbooks)
 
-Five system-seeded playbooks with 12 templates. Wizard flow: Configure (name + segment) -> Review Emails (preview sequence) -> Launch (create draft campaigns). Playbooks and templates are seeded via Supabase MCP, not migration files.
+Playbooks have been merged into the Flow Designer as "Flow Templates." The dedicated `/playbooks` page is gone (redirects to `/flows`). When creating a new flow, users see a name input first, then an optional "Or start from a template" section with 5 system-seeded templates (Welcome Series, Monthly Newsletter, Win-back, Promotional Blast, Onboarding Drip). Selecting a template pre-populates the flow with the right node structure (trigger + send_email + delay nodes) and stores contextual hints in each node's JSONB config (`segment_hint` on trigger, `hint` on send_email/delay nodes). The flow editor surfaces these hints on unconfigured node cards, in the properties panel, and via a "Suggested setup" checklist banner at the top of the timeline. Hints disappear once nodes are configured. Playbook data still lives in the `playbooks` table (read-only, seeded via Supabase MCP).
 
 ### Team & Permissions
 

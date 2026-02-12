@@ -7,6 +7,7 @@ import {
   EnvelopeSimple,
   Clock,
   SignOut,
+  Lightbulb,
 } from "@phosphor-icons/react";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string; weight?: "regular" | "fill" | "bold" }>> = {
@@ -33,6 +34,15 @@ export function FlowNodeCard({
   const Icon = ICONS[meta.icon] ?? Lightning;
   const summary = summarizeNode(node, emails, segments);
 
+  // Show hint when node is unconfigured and has template guidance
+  const cfg = node.config as Record<string, unknown>;
+  let hint: string | null = null;
+  if (node.type === "trigger" && !cfg.segment_id && cfg.segment_hint) {
+    hint = cfg.segment_hint as string;
+  } else if (node.type === "send_email" && !cfg.email_id && cfg.hint) {
+    hint = cfg.hint as string;
+  }
+
   return (
     <button
       onClick={onClick}
@@ -54,6 +64,12 @@ export function FlowNodeCard({
         <div className="text-xs text-stone-500 dark:text-stone-400 truncate">
           {summary}
         </div>
+        {hint && (
+          <div className="flex items-center gap-1 mt-1 text-[11px] text-indigo-500 dark:text-indigo-400 truncate">
+            <Lightbulb className="w-3 h-3 shrink-0" weight="fill" />
+            <span className="truncate">{hint}</span>
+          </div>
+        )}
       </div>
     </button>
   );

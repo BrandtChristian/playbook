@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash, Plus } from "@phosphor-icons/react";
+import { Trash, Plus, Lightbulb } from "@phosphor-icons/react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -166,6 +167,20 @@ function TriggerForm({
             ? "Contacts entering this segment will start the flow."
             : "All contacts in this segment will be enrolled on each run."}
         </p>
+        {(() => {
+          const segHint = !config.segment_id ? (config as unknown as Record<string, unknown>).segment_hint : null;
+          return segHint ? (
+            <div className="flex items-start gap-1.5 mt-1 p-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+              <Lightbulb className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" weight="fill" />
+              <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                <span>Suggested: {String(segHint)}</span>
+                <Link href="/segments" className="block mt-0.5 font-medium underline underline-offset-2 hover:text-indigo-800 dark:hover:text-indigo-200">
+                  Create one in Segments
+                </Link>
+              </div>
+            </div>
+          ) : null;
+        })()}
       </div>
 
       {/* Schedule settings */}
@@ -344,8 +359,16 @@ function SendEmailForm({
     );
   }
 
+  const emailHint = !config.email_id ? (config as unknown as Record<string, unknown>).hint as string | undefined : undefined;
+
   return (
     <div className="flex flex-col gap-4">
+      {emailHint && (
+        <div className="flex items-start gap-1.5 p-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+          <Lightbulb className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" weight="fill" />
+          <p className="text-[11px] text-indigo-700 dark:text-indigo-300">{emailHint}</p>
+        </div>
+      )}
       <div className="grid gap-1.5">
         <Label className="text-xs">Email</Label>
         <Select

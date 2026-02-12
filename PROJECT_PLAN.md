@@ -134,7 +134,7 @@ app/
   (dashboard)/
     layout.tsx                            -- sidebar + header layout
     page.tsx                              -- dashboard home
-    playbooks/page.tsx                    -- playbook browse + wizard
+    playbooks/page.tsx                    -- redirects to /flows
     flows/page.tsx                        -- flow list + editor
     campaigns/page.tsx                    -- campaign list + detail + send
     emails/page.tsx                       -- email list + create from template
@@ -198,7 +198,7 @@ components/
     block-renderer.tsx                    -- block-to-React rendering
     block-edit-modal.tsx                  -- inline block text editing modal
     ai-prompt-bar.tsx                     -- AI generation bar in builder
-  playbooks-client.tsx                    -- playbook browse + 3-step wizard
+  playbooks-client.tsx                    -- (legacy, unused — playbooks merged into flows)
   campaigns-client.tsx                    -- campaign list + detail + send + test
   ai-content-panel.tsx                    -- AI writing assistant (body/subject/improve)
   brand-builder.tsx                       -- visual brand config editor
@@ -350,7 +350,7 @@ supabase/
 
 **AI content:** Claude Sonnet 4.5 generates email subject lines, body copy, improvement suggestions, image alt text, and brand colors. System prompt enforces Liquid variables, HTML format, and concise marketing style. Rate limited (20 req/60s per user).
 
-**Playbooks:** 5 system-seeded guided strategies with 12 templates. Wizard flow: Configure -> Review Emails -> Launch (creates draft campaigns).
+**Flow Templates:** 5 system-seeded templates (from `playbooks` table) available in the flow creation dialog. Pre-populate flows with node structure + contextual hints. Suggestive guidance, not prescriptive.
 
 **Onboarding:** Extensible flow system. Flows define steps dynamically based on profile completeness. Modal UI with animated step transitions. Tracks completion in `profile.seen_flows`.
 
@@ -383,7 +383,7 @@ Resend API key is per-org, stored in the `organizations` table.
 3. **Contacts**: Import CSV -> contacts appear in list -> add to segment -> custom fields
 4. **Templates**: Edit template with Liquid or visual builder -> preview renders in React Email layout
 5. **AI**: Enter prompt -> Claude generates email content -> insert into template / generate alt text
-6. **Playbooks**: Browse -> select -> wizard -> creates campaign drafts
+6. **Flows**: Create flow -> pick template -> editor opens with guided hints -> configure segments + emails
 7. **Send**: Campaign -> test email -> receive in inbox -> send to segment -> stats recorded
 8. **Team**: Invite member -> magic link email -> accept -> see restricted segments
 9. **Segments**: Create dynamic segment -> add filter conditions -> preview matching contacts
@@ -398,8 +398,11 @@ Resend API key is per-org, stored in the `organizations` table.
 ### 1. Flow Designer — DONE
 Visual journey builder at `/flows`. Vertical timeline with node cards, connector lines, "+" insert buttons. 4 node types: Trigger (segment entry or scheduled), Send Email, Wait/Delay, Exit. Trigger supports segment entry or schedule (once/hourly/daily/weekly/monthly) with re-entry cooldown. Auto-save, status toggle (draft/active/paused). Inline email creation + editing from flow editor. Next: condition nodes, A/B splits, execution engine.
 
-### 2. Playbook Rethink — TODO
-Playbooks should NOT auto-generate campaigns. Instead, they act as **inspiration and guided walkthroughs**. When a user says "I want to create a welcome journey", the playbook walks them through: (1) creating the right dynamic segment, (2) building the email(s), (3) wiring it into a flow. The playbook is the guide, not the generator.
+### 2. Playbook Rethink — DONE
+Playbooks merged into Flow Designer as "Flow Templates." Dedicated `/playbooks` page removed (redirects to `/flows`). Sidebar nav updated. Flow creation dialog shows name input first, then "Or start from a template" divider with 5 seeded templates. Selecting a template pre-populates nodes with contextual hints (`segment_hint` on trigger, `hint` on send_email/delay). Flow editor surfaces hints on node cards, in properties panel, and via a "Suggested setup" checklist banner. Hints auto-hide once configured. Guidance is suggestive, not prescriptive — users can add/remove/rearrange freely.
 
 ### 3. Template / Email Decoupling — DONE
 Templates are reusable designs (layout starting points). Emails are individual messages built FROM a template with their own subject + body. New `emails` table. Campaigns and flow nodes reference emails, not templates. Emails page at `/emails` with create-from-template flow. System template toggle. Template creation no longer asks for subject (that's an email concept).
+
+### 4. Flow Execution Engine — TODO
+The flow designer UI is complete but **nothing actually executes**. Setting a flow to "active" only updates a database column. No contacts enroll, no emails send, no delays resolve. Full implementation spec in **[`FLOW_ENGINE_SPEC.md`](FLOW_ENGINE_SPEC.md)**. Summary: Vercel Cron (1-min) hits `/api/cron/process-flows` which uses the service role client to enroll contacts from segments, advance them through nodes, send emails via Resend, and handle delays. Two new tables: `flow_enrollments` (contact journey state) + `flow_execution_log` (audit trail). Manual "Process Now" button as fallback for free-tier Vercel.

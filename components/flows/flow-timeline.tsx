@@ -4,8 +4,47 @@ import { useState } from "react";
 import type { FlowNode } from "@/lib/flows/types";
 import { NODE_PALETTE } from "@/lib/flows/types";
 import { FlowNodeCard } from "./flow-node-card";
-import { Plus } from "@phosphor-icons/react";
+import { Plus, CheckCircle, Circle, X } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
+
+type SetupItem = {
+  nodeId: string;
+  label: string;
+  done: boolean;
+};
+
+function getSetupItems(
+  nodes: FlowNode[],
+  emails: { id: string; name: string }[],
+): SetupItem[] {
+  const items: SetupItem[] = [];
+
+  for (const node of nodes) {
+    const cfg = node.config as Record<string, unknown>;
+
+    if (node.type === "trigger" && cfg.segment_hint) {
+      items.push({
+        nodeId: node.id,
+        label: `Set trigger segment`,
+        done: !!cfg.segment_id,
+      });
+    }
+
+    if (node.type === "send_email" && cfg.hint) {
+      const emailId = cfg.email_id as string | null;
+      const email = emailId ? emails.find((e) => e.id === emailId) : null;
+      // Extract just the title part (before the dash)
+      const hintTitle = (cfg.hint as string).split(" — ")[0];
+      items.push({
+        nodeId: node.id,
+        label: email ? `"${email.name}"` : `Configure "${hintTitle}" email`,
+        done: !!emailId,
+      });
+    }
+  }
+
+  return items;
+}
 
 export function FlowTimeline({
   nodes,
@@ -23,6 +62,13 @@ export function FlowTimeline({
   segments: { id: string; name: string }[];
 }) {
   const sorted = [...nodes].sort((a, b) => a.position - b.position);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Compute setup items for template-derived flows
+  const setupItems = getSetupItems(sorted, emails);
+  const hasSetupItems = setupItems.length > 0;
+  const allDone = setupItems.every((item) => item.done);
+  const showBanner = hasSetupItems && !allDone && !bannerDismissed;
 
   return (
     <div
@@ -31,6 +77,56 @@ export function FlowTimeline({
         if (e.target === e.currentTarget) onSelectNode(null);
       }}
     >
+      {/* Setup checklist banner for template-derived flows */}
+      {showBanner && (
+        <div className="w-full max-w-lg mb-6">
+          <div className="bg-white dark:bg-stone-900 border border-indigo-200 dark:border-indigo-800/50 shadow-sm p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-medium text-stone-900 dark:text-stone-100">
+                  Suggested setup
+                </h3>
+                <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5">
+                  A starting point — add, remove, or rearrange steps freely.
+                </p>
+              </div>
+              <button
+                onClick={() => setBannerDismissed(true)}
+                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="grid gap-1">
+              {setupItems.map((item) => (
+                <button
+                  key={item.nodeId}
+                  onClick={() => onSelectNode(item.nodeId)}
+                  className={`flex items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-stone-50 dark:hover:bg-stone-800 -mx-1 ${
+                    item.done ? "opacity-60" : ""
+                  }`}
+                >
+                  {item.done ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" weight="fill" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-stone-300 dark:text-stone-600 shrink-0" />
+                  )}
+                  <span
+                    className={`text-xs ${
+                      item.done
+                        ? "text-stone-400 dark:text-stone-500 line-through"
+                        : "text-stone-700 dark:text-stone-300"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="popLayout">
         {sorted.map((node, i) => (
           <motion.div

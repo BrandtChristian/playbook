@@ -30,6 +30,7 @@ import {
   ArrowCounterClockwise,
   Megaphone,
   RocketLaunch,
+  Trash,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 
@@ -58,6 +59,14 @@ const PLAYBOOK_ICONS: Record<string, React.ComponentType<any>> = {
   ArrowCounterClockwise,
   Megaphone,
   RocketLaunch,
+};
+
+const SEGMENT_SUGGESTIONS: Record<string, string> = {
+  welcome: "New subscribers who joined recently",
+  winback: "Contacts who haven't engaged in 30+ days",
+  newsletter: "All active subscribers",
+  promotional: "Your most engaged contacts",
+  onboarding: "New users who just signed up",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -113,6 +122,7 @@ export function FlowsClient({
         .insert({
           org_id: orgId,
           name: newName.trim(),
+          description: selectedTemplate?.description ?? null,
           status: "draft",
           trigger_config: DEFAULT_TRIGGER_CONFIG,
         })
@@ -125,27 +135,37 @@ export function FlowsClient({
       let nodeInserts: { flow_id: string; type: string; position: number; config: Record<string, unknown> }[];
 
       if (selectedTemplate) {
-        // Pre-populate from playbook steps: trigger → (send + delay)* → send → exit
-        nodeInserts = [{ flow_id: flow.id, type: "trigger", position: 0, config: {} }];
+        const segHint = SEGMENT_SUGGESTIONS[selectedTemplate.category] ?? null;
+
+        // Pre-populate from playbook steps with contextual hints
+        nodeInserts = [{
+          flow_id: flow.id, type: "trigger", position: 0,
+          config: segHint ? { segment_hint: segHint } : {},
+        }];
         let pos = 1;
 
         selectedTemplate.steps.forEach((step, i) => {
           // Add delay before this step (if delay_days > 0 and not the first step)
           if (step.delay_days > 0 && i > 0) {
+            const duration = step.delay_days - (selectedTemplate.steps[i - 1]?.delay_days ?? 0);
             nodeInserts.push({
               flow_id: flow.id,
               type: "delay",
               position: pos++,
-              config: { duration: step.delay_days - (selectedTemplate.steps[i - 1]?.delay_days ?? 0), unit: "days" },
+              config: { duration, unit: "days", hint: `Wait before "${step.title}"` },
             });
           }
 
-          // Add send_email node (empty — user picks the email later)
+          // Add send_email node with hint from playbook step
           nodeInserts.push({
             flow_id: flow.id,
             type: "send_email",
             position: pos++,
-            config: { email_id: null, subject_override: null },
+            config: {
+              email_id: null,
+              subject_override: null,
+              hint: `${step.title}${step.description ? ` — ${step.description}` : ""}`,
+            },
           });
         });
 
@@ -317,8 +337,19 @@ export function FlowsClient({
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0">
-                    {new Date(flow.created_at).toLocaleDateString()}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-stone-400 dark:text-stone-500">
+                      {new Date(flow.created_at).toLocaleDateString()}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${flow.name}"?`)) handleDelete(flow.id);
+                      }}
+                      className="p-1.5 text-stone-300 dark:text-stone-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    >
+                      <Trash className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </CardContent>
               </Card>
@@ -337,10 +368,27 @@ export function FlowsClient({
             <DialogTitle>Create a new flow</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            {/* Template picker */}
+            {/* Name input — always first */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="flow-name">Flow name</Label>
+              <Input
+                id="flow-name"
+                placeholder="e.g. Welcome Series"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                autoFocus
+              />
+            </div>
+
+            {/* Template picker — optional, below */}
             {playbooks.length > 0 && (
               <div className="grid gap-2">
-                <Label className="text-xs text-muted-foreground">Start from a template</Label>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[11px] text-muted-foreground">Or start from a template</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
                 <div className="grid gap-1.5">
                   {playbooks.map((pb) => {
                     const Icon = PLAYBOOK_ICONS[pb.icon] || Lightning;
@@ -381,19 +429,6 @@ export function FlowsClient({
                 </div>
               </div>
             )}
-
-            {/* Name input */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="flow-name">Flow name</Label>
-              <Input
-                id="flow-name"
-                placeholder="e.g. Welcome Series"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                autoFocus={!playbooks.length}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button
