@@ -66,11 +66,13 @@ export function TemplateEditor({
   fromName,
   onBack,
   onSaved,
+  saveTable = "templates",
 }: {
   template: Template;
   fromName?: string;
   onBack: () => void;
   onSaved: (t: Template) => void;
+  saveTable?: "templates" | "emails";
 }) {
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
@@ -180,7 +182,7 @@ export function TemplateEditor({
     setSaving(true);
     const supabase = createClient();
     const { data, error } = await supabase
-      .from("templates")
+      .from(saveTable)
       .update({ name, subject, body_html: bodyHtml })
       .eq("id", template.id)
       .select()
@@ -188,10 +190,10 @@ export function TemplateEditor({
 
     setSaving(false);
     if (error) {
-      if (!silent) toast.error("Failed to save template");
+      if (!silent) toast.error(`Failed to save ${saveTable === "emails" ? "email" : "template"}`);
     } else {
       savedRef.current = { name, subject, bodyHtml };
-      if (!silent) toast.success("Template saved");
+      if (!silent) toast.success(saveTable === "emails" ? "Email saved" : "Template saved");
       onSaved(data);
     }
   }

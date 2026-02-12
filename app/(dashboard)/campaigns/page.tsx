@@ -14,10 +14,11 @@ export default async function CampaignsPage() {
     .eq("org_id", user.organizations.id)
     .order("created_at", { ascending: false });
 
-  const { data: templates } = await supabase
-    .from("templates")
+  const { data: emails } = await supabase
+    .from("emails")
     .select("id, name, subject, body_html")
-    .or(`org_id.eq.${user.organizations.id},is_system.eq.true`);
+    .eq("org_id", user.organizations.id)
+    .order("name");
 
   const { data: segments } = await supabase
     .from("segments")
@@ -28,7 +29,7 @@ export default async function CampaignsPage() {
   return (
     <CampaignsClient
       campaigns={campaigns ?? []}
-      templates={templates ?? []}
+      emails={emails ?? []}
       segments={segments ?? []}
       orgId={user.organizations.id}
       fromName={user.organizations.from_name || user.organizations.name}

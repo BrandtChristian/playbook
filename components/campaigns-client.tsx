@@ -55,6 +55,7 @@ type Campaign = {
   org_id: string;
   name: string;
   template_id: string | null;
+  email_id: string | null;
   segment_id: string | null;
   subject: string;
   body_html: string;
@@ -66,7 +67,7 @@ type Campaign = {
   created_at: string;
 };
 
-type TemplateRef = {
+type EmailRef = {
   id: string;
   name: string;
   subject: string;
@@ -158,7 +159,7 @@ function summarizeStatuses(campaigns: Campaign[]): string {
 
 export function CampaignsClient({
   campaigns: initialCampaigns,
-  templates,
+  emails,
   segments,
   orgId,
   fromName,
@@ -166,7 +167,7 @@ export function CampaignsClient({
   userEmail,
 }: {
   campaigns: Campaign[];
-  templates: TemplateRef[];
+  emails: EmailRef[];
   segments: Segment[];
   orgId: string;
   fromName?: string;
@@ -180,7 +181,7 @@ export function CampaignsClient({
 
   // Create form state
   const [name, setName] = useState("");
-  const [templateId, setTemplateId] = useState("");
+  const [emailId, setEmailId] = useState("");
   const [segmentId, setSegmentId] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -194,8 +195,8 @@ export function CampaignsClient({
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    const template = templates.find((t) => t.id === templateId);
-    if (!template) return;
+    const email = emails.find((em) => em.id === emailId);
+    if (!email) return;
 
     setAdding(true);
     const supabase = createClient();
@@ -204,10 +205,10 @@ export function CampaignsClient({
       .insert({
         org_id: orgId,
         name,
-        template_id: templateId,
+        email_id: emailId,
         segment_id: segmentId || null,
-        subject: template.subject,
-        body_html: template.body_html,
+        subject: email.subject,
+        body_html: email.body_html,
         status: "draft",
       })
       .select()
@@ -219,7 +220,7 @@ export function CampaignsClient({
     } else {
       setCampaigns([data, ...campaigns]);
       setName("");
-      setTemplateId("");
+      setEmailId("");
       setSegmentId("");
       toast.success("Campaign created");
       setSelectedCampaign(data);
@@ -551,15 +552,15 @@ export function CampaignsClient({
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Template</Label>
-                <Select value={templateId} onValueChange={setTemplateId}>
+                <Label>Email</Label>
+                <Select value={emailId} onValueChange={setEmailId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a template" />
+                    <SelectValue placeholder="Select an email" />
                   </SelectTrigger>
                   <SelectContent>
-                    {templates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
+                    {emails.map((em) => (
+                      <SelectItem key={em.id} value={em.id}>
+                        {em.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -584,7 +585,7 @@ export function CampaignsClient({
                 <DialogClose asChild>
                   <Button variant="outline">Cancel</Button>
                 </DialogClose>
-                <Button type="submit" disabled={adding || !templateId}>
+                <Button type="submit" disabled={adding || !emailId}>
                   {adding ? "Creating..." : "Create"}
                 </Button>
               </DialogFooter>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   EnvelopeSimple,
+  Envelope,
   Users,
   Notebook,
   PaperPlaneTilt,
@@ -12,6 +13,8 @@ import {
   Lightning,
   Database,
   User,
+  TreeStructure,
+  Layout,
 } from "@phosphor-icons/react";
 import {
   Sidebar,
@@ -30,8 +33,10 @@ import { UserMenu } from "@/components/user-menu";
 const navItems = [
   { title: "Dashboard", href: "/", icon: Lightning },
   { title: "Playbooks", href: "/playbooks", icon: Notebook },
+  { title: "Flows", href: "/flows", icon: TreeStructure },
   { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt },
-  { title: "Templates", href: "/templates", icon: EnvelopeSimple },
+  { title: "Emails", href: "/emails", icon: Envelope },
+  { title: "Templates", href: "/templates", icon: Layout },
   { title: "Contacts", href: "/contacts", icon: Users },
   { title: "Segments", href: "/segments", icon: ListDashes },
   { title: "Data", href: "/data", icon: Database },

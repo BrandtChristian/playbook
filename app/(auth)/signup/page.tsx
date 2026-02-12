@@ -9,12 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isEmailAllowed, allowedDomains } from "@/lib/allowed-domains";
+import { isInviteCodeValid, signupEnabled } from "@/lib/invite-code";
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [orgName, setOrgName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -23,6 +25,18 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!signupEnabled) {
+      setError("Signup is currently closed.");
+      setLoading(false);
+      return;
+    }
+
+    if (!isInviteCodeValid(inviteCode)) {
+      setError("Invalid invite code.");
+      setLoading(false);
+      return;
+    }
 
     if (!isEmailAllowed(email)) {
       setError(
@@ -104,6 +118,17 @@ export default function SignupPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="inviteCode">Invite code</Label>
+            <Input
+              id="inviteCode"
+              type="text"
+              placeholder="Enter your invite code"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              required
             />
           </div>
           {error && (

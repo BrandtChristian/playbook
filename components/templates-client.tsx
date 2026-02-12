@@ -48,7 +48,6 @@ export function TemplatesClient({
   const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates);
   const [name, setName] = useState("");
-  const [subject, setSubject] = useState("");
   const [adding, setAdding] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(
     () => (initialEditId ? initialTemplates.find((t) => t.id === initialEditId) ?? null : null)
@@ -66,6 +65,12 @@ export function TemplatesClient({
   const [showBrandBuilder, setShowBrandBuilder] = useState(false);
   const [brandConfig, setBrandConfig] = useState<BrandConfig | undefined>(existingBrandConfig);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [showSystemTemplates, setShowSystemTemplates] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("forge:showSystemTemplates") !== "false";
+    }
+    return true;
+  });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -77,7 +82,7 @@ export function TemplatesClient({
       .insert({
         org_id: orgId,
         name,
-        subject,
+        subject: "",
         body_html: `<h1>Hello {{ first_name }}</h1>\n<p>Write your email here...</p>`,
       })
       .select()
@@ -89,7 +94,6 @@ export function TemplatesClient({
     } else {
       setTemplates([data, ...templates]);
       setName("");
-      setSubject("");
       toast.success("Template created");
       editTemplate(data);
     }
@@ -143,10 +147,22 @@ export function TemplatesClient({
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Templates</h1>
           <p className="text-muted-foreground mt-1">
-            Email templates with Liquid variables for personalization.
+            Reusable designs to build emails from.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-500 dark:text-stone-400">
+            <input
+              type="checkbox"
+              checked={showSystemTemplates}
+              onChange={(e) => {
+                setShowSystemTemplates(e.target.checked);
+                localStorage.setItem("forge:showSystemTemplates", String(e.target.checked));
+              }}
+              className="accent-indigo-500"
+            />
+            System templates
+          </label>
           <Button variant="outline" onClick={() => setShowBrandBuilder(true)}>
             <PaintBrush className="mr-2 h-4 w-4" />
             {brandConfig ? "Edit Brand" : "Build Brand"}
@@ -158,16 +174,12 @@ export function TemplatesClient({
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create template</DialogTitle>
-              <DialogDescription>Start with a name and subject line.</DialogDescription>
+              <DialogDescription>A reusable design to build emails from.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreate} className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="tplName">Template name</Label>
-                <Input id="tplName" placeholder="Welcome email" value={name} onChange={(e) => setName(e.target.value)} required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="tplSubject">Subject line</Label>
-                <Input id="tplSubject" placeholder="Welcome to {{ company }}" value={subject} onChange={(e) => setSubject(e.target.value)} required />
+                <Input id="tplName" placeholder="e.g. Marketing Standard" value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
@@ -204,7 +216,7 @@ export function TemplatesClient({
         return (
           <>
             {/* User templates */}
-            {userTemplates.length === 0 && systemTemplates.length === 0 ? (
+            {userTemplates.length === 0 && (!showSystemTemplates || systemTemplates.length === 0) ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <EnvelopeSimple className="h-12 w-12 text-muted-foreground mb-4" weight="duotone" />
@@ -244,7 +256,7 @@ export function TemplatesClient({
                 )}
 
                 {/* System templates grouped by category */}
-                {categoryGroups.size > 0 && (
+                {showSystemTemplates && categoryGroups.size > 0 && (
                   <div className="space-y-2">
                     <h2 className="text-sm font-medium text-muted-foreground">System Templates</h2>
                     <div className="grid gap-3">
