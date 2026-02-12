@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,18 +36,33 @@ export function TemplatesClient({
   orgName,
   fromName,
   existingBrandConfig,
+  initialEditId,
 }: {
   templates: Template[];
   orgId: string;
   orgName: string;
   fromName?: string;
   existingBrandConfig?: BrandConfig;
+  initialEditId?: string;
 }) {
+  const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [adding, setAdding] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(
+    () => (initialEditId ? initialTemplates.find((t) => t.id === initialEditId) ?? null : null)
+  );
+
+  function editTemplate(template: Template) {
+    setEditingTemplate(template);
+    router.replace(`/templates?edit=${template.id}`);
+  }
+
+  function closeEditor() {
+    setEditingTemplate(null);
+    router.replace("/templates");
+  }
   const [showBrandBuilder, setShowBrandBuilder] = useState(false);
   const [brandConfig, setBrandConfig] = useState<BrandConfig | undefined>(existingBrandConfig);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -75,7 +91,7 @@ export function TemplatesClient({
       setName("");
       setSubject("");
       toast.success("Template created");
-      setEditingTemplate(data);
+      editTemplate(data);
     }
   }
 
@@ -86,7 +102,7 @@ export function TemplatesClient({
       toast.error("Failed to delete template");
     } else {
       setTemplates(templates.filter((t) => t.id !== id));
-      if (editingTemplate?.id === id) setEditingTemplate(null);
+      if (editingTemplate?.id === id) closeEditor();
       toast.success("Template deleted");
     }
   }
@@ -115,7 +131,7 @@ export function TemplatesClient({
       <TemplateEditor
         template={editingTemplate}
         fromName={fromName}
-        onBack={() => setEditingTemplate(null)}
+        onBack={closeEditor}
         onSaved={handleSaved}
       />
     );
@@ -214,7 +230,7 @@ export function TemplatesClient({
                         </CardHeader>
                         <CardContent>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setEditingTemplate(template)}>
+                            <Button variant="outline" size="sm" onClick={() => editTemplate(template)}>
                               <PencilSimple className="mr-1 h-3 w-3" />Edit
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)}>
@@ -280,7 +296,7 @@ export function TemplatesClient({
                                           Subject: {template.subject}
                                         </p>
                                       </div>
-                                      <Button variant="outline" size="sm" onClick={() => setEditingTemplate(template)}>
+                                      <Button variant="outline" size="sm" onClick={() => editTemplate(template)}>
                                         <PencilSimple className="mr-1 h-3 w-3" />Edit
                                       </Button>
                                     </div>

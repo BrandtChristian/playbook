@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings-form";
+import { TeamMembers } from "@/components/team-members";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -14,6 +15,18 @@ export default async function SettingsPage() {
     .eq("org_id", user.organizations.id)
     .order("created_at", { ascending: true });
 
+  const { data: members } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url, role, created_at")
+    .eq("org_id", user.organizations.id)
+    .order("created_at", { ascending: true });
+
+  const { data: segments } = await supabase
+    .from("segments")
+    .select("id, name, contact_count")
+    .eq("org_id", user.organizations.id)
+    .order("name");
+
   return (
     <div className="space-y-6">
       <div>
@@ -23,6 +36,14 @@ export default async function SettingsPage() {
         </p>
       </div>
       <SettingsForm org={user.organizations} consentTypes={consentTypes ?? []} />
+      <TeamMembers
+        members={members ?? []}
+        currentUserId={user.id}
+        currentUserRole={user.role}
+        orgId={user.organizations.id}
+        hasResendKey={!!user.organizations.resend_api_key}
+        segments={segments ?? []}
+      />
     </div>
   );
 }

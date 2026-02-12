@@ -46,9 +46,9 @@ export function AppSidebar() {
       <SidebarHeader className="border-b px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center bg-primary text-primary-foreground font-bold text-sm">
-            H
+            F
           </div>
-          <span className="font-semibold text-lg">Hackathon ESP</span>
+          <span className="font-semibold text-lg">Forge</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>

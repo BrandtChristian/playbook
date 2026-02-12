@@ -211,9 +211,9 @@ export function OnboardingWizard({
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Welcome to Playbook</DialogTitle>
+          <DialogTitle>Welcome to Forge</DialogTitle>
           <DialogDescription>
-            Let&apos;s get you set up in 3 quick steps.
+            Let&apos;s get {orgName} set up in 3 quick steps.
           </DialogDescription>
         </DialogHeader>
 

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import {
@@ -80,30 +80,56 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back, {user.full_name?.split(" ")[0] || "there"}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          {user.organizations.name} &mdash; Let&apos;s get your campaigns running.
-        </p>
-      </div>
+      {!user.organizations.onboarding_completed ? (
+        <>
+          {/* First-visit hero */}
+          <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground font-bold text-sm shrink-0">
+                  F
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">
+                    Welcome to Forge, {user.full_name?.split(" ")[0] || "there"}
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    Let&apos;s get {user.organizations.name} sending emails in minutes.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Follow the steps below to connect your sending infrastructure, import your contacts, and launch your first campaign with AI-powered playbooks.
+              </p>
+            </CardContent>
+          </Card>
 
-      {/* Onboarding wizard for brand new users */}
-      {showWizard && (
-        <OnboardingWizard
-          orgId={user.organizations.id}
-          orgName={user.organizations.name}
-          open={true}
-        />
-      )}
+          {/* Onboarding wizard for brand new users */}
+          {showWizard && (
+            <OnboardingWizard
+              orgId={user.organizations.id}
+              orgName={user.organizations.name}
+              open={true}
+            />
+          )}
 
-      {/* Persistent checklist */}
-      {!user.organizations.onboarding_completed && (
-        <OnboardingChecklist
-          state={onboardingState}
-          orgId={user.organizations.id}
-        />
+          {/* Persistent checklist */}
+          <OnboardingChecklist
+            state={onboardingState}
+            orgId={user.organizations.id}
+          />
+        </>
+      ) : (
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Welcome back, {user.full_name?.split(" ")[0] || "there"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {user.organizations.name} &mdash; Here&apos;s your campaign overview.
+          </p>
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { TemplatesClient } from "@/components/templates-client";
 
-export default async function TemplatesPage() {
+export default async function TemplatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>;
+}) {
+  const params = await searchParams;
   const user = await getCurrentUser();
   const supabase = await createClient();
 
@@ -19,6 +24,7 @@ export default async function TemplatesPage() {
       orgId={user.organizations.id}
       orgName={user.organizations.name}
       fromName={user.organizations.from_name || user.organizations.name}
+      initialEditId={params.edit}
       existingBrandConfig={
         user.organizations.brand_config &&
         typeof user.organizations.brand_config === "object" &&

@@ -15,7 +15,7 @@ A marketing automation platform that uses Resend as sending infrastructure (unde
 
 - **Framework:** Next.js 16 (App Router)
 - **Database & Auth:** Supabase (Postgres + Auth + RLS)
-- **UI:** shadcn/ui (maia style, stone base, orange theme, Phosphor icons, DM Sans, no radius)
+- **UI:** shadcn/ui (maia style, stone base, indigo theme, Phosphor icons, DM Sans, no radius, dark mode)
 - **Email sending:** Resend (under the hood)
 - **Templating:** LiquidJS (user-facing) + React Email (rendering)
 - **AI:** Claude Sonnet 4.5 via Anthropic SDK
@@ -76,8 +76,15 @@ A marketing automation platform that uses Resend as sending infrastructure (unde
 - [x] Resend client helper (`lib/resend.tsx`) — `getResendClient()`, `renderEmail()`, `renderTestEmail()`
 - [x] API routes: `/api/send` (campaign to segment), `/api/send-test` (single test email), `/api/resend/domains` (domain fetch)
 
-## Day 5: Demo Prep + Deploy — TODO
+## Day 5: Demo Prep + Deploy — IN PROGRESS
 
+### Done
+- [x] **Rebrand**: "Hackathon ESP" → **Forge** (by Dwarf). "F" lettermark in sidebar, updated metadata.
+- [x] **Theme**: Switched from orange → indigo accent color (OKLCH hue 264-266). Updated all CSS variables, hardcoded Tailwind classes (`indigo-*`), and hex fallbacks (`#6366f1`).
+- [x] **Dark mode**: Wired up `next-themes` with ThemeProvider. Sun/Moon toggle in dashboard header. Full dark mode support across email builder (canvas, palette, properties, modals, preview).
+- [x] **Base color**: Slightly darkened from pure white to warm off-white (`oklch(0.97 0.003 80)`).
+
+### TODO
 1. Demo data seeding script (org, contacts, segments, campaigns with stats)
 2. UI polish: loading skeletons, error toasts, empty states, responsive
 3. Deploy to Vercel (env vars, Supabase connection)

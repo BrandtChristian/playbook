@@ -225,12 +225,12 @@ export function BrandBuilder({
                   <div className="flex gap-2">
                     <input
                       type="color"
-                      value={primaryColor || "#ea580c"}
+                      value={primaryColor || "#6366f1"}
                       onChange={(e) => setPrimaryColor(e.target.value)}
                       className="h-9 w-12 rounded border cursor-pointer"
                     />
                     <Input
-                      placeholder="#ea580c"
+                      placeholder="#6366f1"
                       value={primaryColor}
                       onChange={(e) => setPrimaryColor(e.target.value)}
                       className="flex-1"

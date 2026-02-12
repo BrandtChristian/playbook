@@ -47,8 +47,8 @@ export default function SignupPage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">Create your account</CardTitle>
-        <CardDescription>Get started with your marketing platform</CardDescription>
+        <CardTitle className="text-2xl font-bold">Create your Forge account</CardTitle>
+        <CardDescription>Start sending beautiful emails in minutes, powered by AI.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSignup} className="grid gap-4">

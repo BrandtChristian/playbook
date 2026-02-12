@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -17,8 +27,10 @@ import {
   Code,
   Cursor,
   PaperPlaneTilt,
+  Lightning,
+  Check,
+  CloudArrowUp,
 } from "@phosphor-icons/react";
-import { AiContentPanel } from "@/components/ai-content-panel";
 import { EmailBuilder } from "@/components/email-builder/email-builder";
 import {
   type EmailBlock,
@@ -74,6 +86,12 @@ export function TemplateEditor({
   const [testEmail, setTestEmail] = useState("");
   const [showTestForm, setShowTestForm] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+
+  // Track last-saved values for dirty detection
+  const savedRef = useRef({ name: template.name, subject: template.subject, bodyHtml: template.body_html });
+  const isDirty = name !== savedRef.current.name || subject !== savedRef.current.subject || bodyHtml !== savedRef.current.bodyHtml;
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Listen for preview iframe height messages
   useEffect(() => {
@@ -122,7 +140,24 @@ export function TemplateEditor({
     return () => clearTimeout(timer);
   }, [bodyHtml, fetchPreview]);
 
-  async function handleSave() {
+  // Check all image blocks (including inside columns) for missing alt text
+  function findMissingAltText(blockList: EmailBlock[]): boolean {
+    for (const b of blockList) {
+      if (b.type === "image" && b.src && !b.alt?.trim()) return true;
+      if (b.type === "columns") {
+        if (findMissingAltText(b.left) || findMissingAltText(b.right)) return true;
+      }
+    }
+    return false;
+  }
+
+  async function handleSave(silent = false) {
+    // Validate alt text on all images (only block on manual save)
+    if (!silent && editorMode === "builder" && findMissingAltText(blocks)) {
+      toast.error("All images need alt text. Add it manually or click the AI button.");
+      return;
+    }
+
     setSaving(true);
     const supabase = createClient();
     const { data, error } = await supabase
@@ -134,11 +169,39 @@ export function TemplateEditor({
 
     setSaving(false);
     if (error) {
-      toast.error("Failed to save template");
+      if (!silent) toast.error("Failed to save template");
     } else {
-      toast.success("Template saved");
+      savedRef.current = { name, subject, bodyHtml };
+      if (!silent) toast.success("Template saved");
       onSaved(data);
     }
+  }
+
+  // Auto-save: debounce 2s after any change
+  useEffect(() => {
+    if (!isDirty) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      handleSave(true);
+    }, 2000);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, subject, bodyHtml]);
+
+  function handleBack() {
+    if (isDirty) {
+      setShowLeaveDialog(true);
+    } else {
+      onBack();
+    }
+  }
+
+  async function handleSaveAndLeave() {
+    await handleSave(true);
+    setShowLeaveDialog(false);
+    onBack();
   }
 
   async function handleSendTest() {
@@ -182,25 +245,41 @@ export function TemplateEditor({
 
   // AI inserts content → either fill existing blocks (JSON) or parse HTML into new blocks
   function handleInsertBlocks(result: string) {
-    const trimmed = result.trim();
+    // Strip markdown fences if AI wrapped the response
+    let cleaned = result.trim();
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+    }
+
+    console.log("[AI Fill] Raw result:", result.slice(0, 200));
+    console.log("[AI Fill] Cleaned:", cleaned.slice(0, 200));
+    console.log("[AI Fill] Blocks on canvas:", blocks.map(b => b.type));
 
     // Structure-aware: AI returned JSON array to fill existing blocks
-    if (trimmed.startsWith("[")) {
+    if (cleaned.startsWith("[")) {
       try {
-        const fills = JSON.parse(trimmed);
+        const fills = JSON.parse(cleaned);
+        console.log("[AI Fill] Parsed JSON:", fills);
+
         const filledBlocks = blocks.map((block, i) => {
-          const fill = fills[i];
-          if (!fill) return block;
+          const raw = fills[i];
+          if (!raw) return block;
+
+          // Handle both flat { "text": "..." } and nested { "heading": { "text": "..." } }
+          const fill = raw[block.type] || raw;
+
+          console.log(`[AI Fill] Block ${i} (${block.type}):`, fill);
+
           switch (block.type) {
             case "heading":
-              return { ...block, text: fill.text || block.text };
+              return { ...block, text: fill?.text ?? block.text };
             case "text":
-              return { ...block, html: fill.html || block.html };
+              return { ...block, html: fill?.html ?? block.html };
             case "button":
               return {
                 ...block,
-                text: fill.text || block.text,
-                url: fill.url || block.url,
+                text: fill?.text ?? block.text,
+                url: fill?.url ?? block.url,
               };
             default:
               return block;
@@ -209,22 +288,90 @@ export function TemplateEditor({
         setBlocks(filledBlocks);
         setBodyHtml(serializeBlocks(filledBlocks));
         return;
-      } catch {
+      } catch (e) {
+        console.error("[AI Fill] JSON parse failed:", e);
         // Fall through to HTML parsing
       }
     }
 
+    console.log("[AI Fill] Falling through to HTML parsing");
     // Fallback: free-form HTML → parse into new blocks
-    const newBlocks = parseHtmlToBlocks(trimmed);
+    const newBlocks = parseHtmlToBlocks(cleaned);
     setBlocks(newBlocks);
     setBodyHtml(serializeBlocks(newBlocks));
   }
 
-  // AI inserts raw HTML (code mode fallback)
-  function handleInsertBody(html: string) {
-    setBodyHtml(html);
-    if (editorMode === "builder") {
-      setBlocks(parseHtmlToBlocks(html));
+  // AI generates full email from scratch
+  function handleGenerateEmail(html: string) {
+    const newBlocks = parseHtmlToBlocks(html);
+    setBlocks(newBlocks);
+    setBodyHtml(serializeBlocks(newBlocks));
+  }
+
+  // AI improves a single block
+  function handleImproveBlock(blockId: string, result: string) {
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
+
+    let updated: EmailBlock;
+    switch (block.type) {
+      case "heading":
+        updated = { ...block, text: result.trim() };
+        break;
+      case "text":
+        updated = { ...block, html: result.trim() };
+        break;
+      case "button": {
+        try {
+          const parsed = JSON.parse(result);
+          updated = {
+            ...block,
+            text: parsed.text || block.text,
+            url: parsed.url || block.url,
+          };
+        } catch {
+          updated = { ...block, text: result.trim() };
+        }
+        break;
+      }
+      default:
+        return;
+    }
+
+    const newBlocks = blocks.map((b) => (b.id === blockId ? updated : b));
+    setBlocks(newBlocks);
+    setBodyHtml(serializeBlocks(newBlocks));
+  }
+
+  // AI generates subject line from body content
+  const [generatingSubject, setGeneratingSubject] = useState(false);
+  async function handleGenerateSubject() {
+    if (!bodyHtml.trim()) {
+      toast.error("Add some content first");
+      return;
+    }
+    setGeneratingSubject(true);
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "subject",
+          prompt: `Based on this email body, generate subject lines:\n\n${bodyHtml.slice(0, 500)}`,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        const firstLine = json.result.split("\n").find((l: string) => l.trim());
+        if (firstLine) {
+          setSubject(firstLine.replace(/^\d+\.\s*/, "").trim());
+          toast.success("Subject generated");
+        }
+      }
+    } catch {
+      toast.error("Failed to generate subject");
+    } finally {
+      setGeneratingSubject(false);
     }
   }
 
@@ -244,7 +391,7 @@ export function TemplateEditor({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack}>
+          <Button variant="ghost" size="icon" onClick={handleBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -299,10 +446,28 @@ export function TemplateEditor({
               Send Test
             </Button>
           )}
-          <Button onClick={handleSave} disabled={saving}>
-            <FloppyDisk className="mr-2 h-4 w-4" />
-            {saving ? "Saving..." : "Save"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {saving ? (
+              <span className="flex items-center gap-1.5 text-xs text-stone-400">
+                <CloudArrowUp className="h-3.5 w-3.5 animate-pulse" />
+                Saving...
+              </span>
+            ) : isDirty ? (
+              <span className="flex items-center gap-1.5 text-xs text-amber-500">
+                <FloppyDisk className="h-3.5 w-3.5" />
+                Unsaved
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-500">
+                <Check className="h-3.5 w-3.5" weight="bold" />
+                Saved
+              </span>
+            )}
+            <Button onClick={() => handleSave(false)} disabled={saving || !isDirty} size="sm" variant="outline">
+              <FloppyDisk className="mr-1.5 h-3.5 w-3.5" />
+              Save
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -317,11 +482,28 @@ export function TemplateEditor({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="tplSubject">Subject</Label>
-          <Input
-            id="tplSubject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
+          <div className="flex gap-1.5">
+            <Input
+              id="tplSubject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 text-stone-400 dark:text-stone-500 hover:text-indigo-500 dark:hover:text-indigo-400"
+              onClick={handleGenerateSubject}
+              disabled={generatingSubject || !bodyHtml.trim()}
+              title="Generate subject with AI"
+            >
+              {generatingSubject ? (
+                <CircleNotch className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Lightning className="h-3.5 w-3.5" weight="fill" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -347,6 +529,9 @@ export function TemplateEditor({
                 blocks={blocks}
                 onChange={handleBuilderChange}
                 onBlocksChange={handleBlocksChange}
+                onGenerateEmail={handleGenerateEmail}
+                onFillBlocks={handleInsertBlocks}
+                onImproveBlock={handleImproveBlock}
               />
             </TabsContent>
 
@@ -373,24 +558,10 @@ export function TemplateEditor({
             </TabsContent>
           </Tabs>
 
-          {/* AI Content Assistant */}
-          <AiContentPanel
-            currentBody={bodyHtml}
-            onInsertBody={handleInsertBody}
-            onInsertSubject={(s) => setSubject(s)}
-            onInsertBlocks={
-              editorMode === "builder" ? handleInsertBlocks : undefined
-            }
-            blockStructure={
-              editorMode === "builder" && blocks.length > 0
-                ? blocks.map((b) => b.type)
-                : undefined
-            }
-          />
         </div>
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-stone-400">
+            <Label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
               <Eye className="h-3.5 w-3.5" />
               Preview
               {loadingPreview && (
@@ -415,7 +586,7 @@ export function TemplateEditor({
               </div>
 
               {/* Email content */}
-              <div className="bg-[#f6f6f6]">
+              <div className="bg-[#f6f6f6] dark:bg-stone-900">
                 {previewHtml ? (
                   <iframe
                     srcDoc={previewHtml}
@@ -426,7 +597,7 @@ export function TemplateEditor({
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center min-h-[460px] text-sm text-stone-400 gap-2">
-                    <Eye className="h-6 w-6 text-stone-300" />
+                    <Eye className="h-6 w-6 text-stone-300 dark:text-stone-600" />
                     {loadingPreview
                       ? "Rendering..."
                       : "Preview appears here"}
@@ -437,6 +608,25 @@ export function TemplateEditor({
           </div>
         </div>
       </div>
+
+      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this template. What would you like to do?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowLeaveDialog(false); onBack(); }}>
+              Leave without saving
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveAndLeave}>
+              Save and leave
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

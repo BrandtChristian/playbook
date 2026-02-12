@@ -44,7 +44,7 @@ export function PreferenceCenter({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const primaryColor = brandConfig?.primary_color || "#ea580c";
+  const primaryColor = brandConfig?.primary_color || "#6366f1";
 
   function toggleConsent(id: string) {
     setConsents((prev) => ({ ...prev, [id]: !prev[id] }));

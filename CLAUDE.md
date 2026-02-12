@@ -93,7 +93,9 @@ Resend API key is per-org in the database.
 
 ## Conventions
 
-- **shadcn/ui theme**: Maia style, Radix base, stone base color, orange accent, Phosphor icons, DM Sans font, zero border radius.
+- **Product name**: **Forge** (by Dwarf). Sidebar shows "F" lettermark + "Forge" text.
+- **shadcn/ui theme**: Maia style, Radix base, stone base color, **indigo accent** (`oklch(0.511 0.262 266)`), Phosphor icons, DM Sans font, zero border radius.
+- **Dark mode**: Enabled via `next-themes` (`ThemeProvider` in `app/layout.tsx`). Toggle button in dashboard header (Sun/Moon icons). Theme colors defined for both `:root` and `.dark` in `globals.css`. Custom components use `dark:` Tailwind variants for hardcoded colors.
 - **Component pattern**: Server page fetches data via `getCurrentUser()` + Supabase queries, passes to a `"use client"` component (e.g., `contacts-client.tsx`, `campaigns-client.tsx`).
 - **Path alias**: `@/*` maps to repo root.
 - **Next.js 16**: Proxy file is `proxy.ts` (not `middleware.ts`), exported function is `proxy` (not `middleware`).

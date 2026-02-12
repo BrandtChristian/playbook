@@ -22,12 +22,12 @@ export type OnboardingState = {
 };
 
 const STEPS = [
-  { key: "resend_connected", label: "Connect Resend", href: "/settings" },
-  { key: "contacts_imported", label: "Import contacts", href: "/contacts" },
-  { key: "segment_created", label: "Create a segment", href: "/segments" },
-  { key: "brand_built", label: "Build brand template", href: "/templates" },
-  { key: "playbook_launched", label: "Launch a playbook", href: "/playbooks" },
-  { key: "campaign_sent", label: "Send first campaign", href: "/campaigns" },
+  { key: "resend_connected", label: "Connect Resend", description: "Link your sending infrastructure so Forge can deliver emails.", href: "/settings" },
+  { key: "contacts_imported", label: "Import contacts", description: "Add the people you want to reach \u2014 manually or via CSV.", href: "/contacts" },
+  { key: "segment_created", label: "Create a segment", description: "Group contacts for targeted campaigns.", href: "/segments" },
+  { key: "brand_built", label: "Build brand template", description: "Set your colors, logo, and footer for consistent emails.", href: "/templates" },
+  { key: "playbook_launched", label: "Launch a playbook", description: "Use a proven email strategy \u2014 AI writes the content for you.", href: "/playbooks" },
+  { key: "campaign_sent", label: "Send first campaign", description: "Hit send and watch the stats roll in.", href: "/campaigns" },
 ] as const;
 
 export function OnboardingChecklist({
@@ -79,18 +79,23 @@ export function OnboardingChecklist({
             <Link
               key={step.key}
               href={step.href}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors"
             >
               {done ? (
                 <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" weight="fill" />
               ) : (
                 <Circle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
               )}
-              <span className={done ? "text-muted-foreground line-through" : "font-medium"}>
-                {step.label}
-              </span>
+              <div className="flex-1 min-w-0">
+                <span className={done ? "text-muted-foreground line-through" : "font-medium"}>
+                  {step.label}
+                </span>
+                {!done && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                )}
+              </div>
               {!done && (
-                <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               )}
             </Link>
           );

@@ -6,7 +6,7 @@ const BRAND_SYSTEM_PROMPT = `You are a brand identity designer for email marketi
 Given a company description, generate a cohesive email brand configuration.
 
 Return ONLY valid JSON with these exact keys:
-- primary_color (hex, e.g. "#ea580c")
+- primary_color (hex, e.g. "#6366f1")
 - secondary_color (hex, complementary to primary)
 - header_bg_color (hex, for the email header background)
 - text_color (hex, for body text — must be dark enough for readability)

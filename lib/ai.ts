@@ -15,9 +15,10 @@ Rules:
 - Do NOT use markdown — use HTML tags only`;
 
 export type GenerateRequest = {
-  type: "subject" | "body" | "improve";
+  type: "subject" | "body" | "improve" | "improve-block";
   prompt: string;
   context?: string;
   currentContent?: string;
   structure?: string[];
+  blockType?: string;
 };

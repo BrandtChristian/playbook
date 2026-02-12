@@ -172,7 +172,11 @@ export function SegmentsClient({
         {segments.length === 0 ? (
           <Card className="col-span-full">
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <p className="text-muted-foreground">No segments yet.</p>
+              <Users className="h-12 w-12 text-muted-foreground mb-4" weight="duotone" />
+              <p className="text-muted-foreground font-medium">No segments yet</p>
+              <p className="text-sm text-muted-foreground mt-1 text-center max-w-sm">
+                Segments group your contacts for targeted campaigns. Create your first segment to start reaching the right people.
+              </p>
             </CardContent>
           </Card>
         ) : (
