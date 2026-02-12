@@ -11,6 +11,7 @@ import {
   ListDashes,
   Lightning,
   Database,
+  User,
 } from "@phosphor-icons/react";
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const navItems = [
 ];
 
 const settingsItems = [
+  { title: "Account", href: "/account", icon: User },
   { title: "Settings", href: "/settings", icon: Gear },
 ];
 

@@ -2,12 +2,16 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getCurrentUser } from "@/lib/auth/dal";
+import { FlowProvider } from "@/components/onboarding/flow-provider";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getCurrentUser();
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -21,6 +25,7 @@ export default function DashboardLayout({
         </header>
         <main className="flex-1 p-6">{children}</main>
       </SidebarInset>
+      <FlowProvider profile={user} />
     </SidebarProvider>
   );
 }

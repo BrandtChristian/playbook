@@ -35,6 +35,9 @@ export function UserMenu() {
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuItem onClick={() => router.push("/account")}>
+          Account
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => router.push("/settings")}>
           Settings
         </DropdownMenuItem>

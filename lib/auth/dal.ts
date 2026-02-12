@@ -7,8 +7,11 @@ export type Profile = {
   org_id: string;
   full_name: string | null;
   avatar_url: string | null;
+  job_title: string | null;
+  preferred_test_email: string | null;
   role: "owner" | "admin" | "member";
   created_at: string;
+  seen_flows: Record<string, string>;
   organizations: {
     id: string;
     name: string;
