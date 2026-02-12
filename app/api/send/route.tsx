@@ -100,9 +100,8 @@ export async function POST(request: NextRequest) {
     ? `${safeName} <${org.from_email}>`
     : org.from_email;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
   let sent = 0;
   let failed = 0;

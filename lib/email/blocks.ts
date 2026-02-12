@@ -261,7 +261,10 @@ export const BLOCK_PALETTE: PaletteItem[] = [
   },
 ];
 
-// --- Social icon PNGs (Phosphor icons, hosted in /public/icons/social/) ---
+// --- Social icon PNGs ---
+// CDN-hosted icons for email compatibility (self-hosted icons get blocked by
+// ProtonMail, Gmail image proxies, etc. when served from non-standard ports).
+// Falls back to app-hosted icons for non-color styles.
 
 function getBaseUrl(): string {
   if (typeof window !== "undefined") return window.location.origin;
@@ -282,6 +285,16 @@ const SOCIAL_ICON_ALT: Record<string, string> = {
   tiktok: "TikTok",
 };
 
+// CDN-hosted color icons (Simple Icons via cdn.simpleicons.org)
+const CDN_SOCIAL_ICONS: Record<string, { slug: string; color: string }> = {
+  twitter: { slug: "x", color: "000000" },
+  facebook: { slug: "facebook", color: "0866FF" },
+  instagram: { slug: "instagram", color: "E4405F" },
+  linkedin: { slug: "linkedin", color: "0A66C2" },
+  youtube: { slug: "youtube", color: "FF0000" },
+  tiktok: { slug: "tiktok", color: "000000" },
+};
+
 const ICON_STYLE_DIR: Record<SocialIconStyle, string> = {
   color: "social",
   grey: "social-grey",
@@ -292,6 +305,21 @@ const ICON_STYLE_DIR: Record<SocialIconStyle, string> = {
 function getSocialIcon(platform: string, style: SocialIconStyle = "color"): string {
   const alt = SOCIAL_ICON_ALT[platform];
   if (!alt) return "";
+
+  const cdn = CDN_SOCIAL_ICONS[platform];
+  if (cdn) {
+    let iconColor: string;
+    switch (style) {
+      case "color": iconColor = cdn.color; break;
+      case "grey": iconColor = "9CA3AF"; break;
+      case "black": iconColor = "1C1917"; break;
+      case "white": iconColor = "FFFFFF"; break;
+    }
+    const src = `https://cdn.simpleicons.org/${cdn.slug}/${iconColor}`;
+    return `<img src="${src}" alt="${alt}" width="20" height="20" style="display:inline-block;" />`;
+  }
+
+  // Fallback to self-hosted
   const base = getBaseUrl();
   const dir = ICON_STYLE_DIR[style];
   return `<img src="${base}/icons/${dir}/${platform}.png" alt="${alt}" width="20" height="20" style="display:inline-block;" />`;
