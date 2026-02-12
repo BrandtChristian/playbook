@@ -1,20 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CircleNotch } from "@phosphor-icons/react";
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
 
-    // @supabase/ssr defaults to PKCE flow and ignores hash fragment tokens.
-    // Magic links from admin.generateLink use implicit flow (#access_token=...).
-    // We parse the hash manually and call setSession.
+    // Verify the magic link token via verifyOtp.
+    // We use token_hash (query param) instead of the Supabase /auth/v1/verify
+    // endpoint to avoid email link scanners (e.g. Outlook SafeLinks)
+    // consuming the one-time token before the real user clicks.
+    const tokenHash = searchParams.get("token_hash");
+    const type = searchParams.get("type");
+
+    if (tokenHash && type === "magiclink") {
+      supabase.auth
+        .verifyOtp({ token_hash: tokenHash, type: "magiclink" })
+        .then(({ error: otpError }) => {
+          if (!otpError) {
+            router.push("/");
+          } else {
+            console.error("verifyOtp error:", otpError);
+            setError(
+              "Failed to sign you in. The link may have expired — ask your admin to resend the invite."
+            );
+          }
+        });
+      return;
+    }
+
+    // Legacy fallback: handle hash fragment tokens from old-style links
     const hash = window.location.hash;
     if (hash) {
       const params = new URLSearchParams(hash.substring(1));
@@ -32,7 +54,9 @@ export default function AcceptInvitePage() {
               router.push("/");
             } else {
               console.error("setSession error:", sessionError);
-              setError("Failed to sign you in. Please try logging in manually.");
+              setError(
+                "Failed to sign you in. Please try logging in manually."
+              );
             }
           });
         return;
@@ -47,7 +71,7 @@ export default function AcceptInvitePage() {
         setError("Unable to sign you in. The link may have expired.");
       }
     });
-  }, [router]);
+  }, [router, searchParams]);
 
   if (error) {
     return (
@@ -65,5 +89,20 @@ export default function AcceptInvitePage() {
       <CircleNotch className="h-6 w-6 animate-spin text-primary" />
       <p className="text-sm text-muted-foreground">Signing you in...</p>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center gap-3">
+          <CircleNotch className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Signing you in...</p>
+        </div>
+      }
+    >
+      <AcceptInviteContent />
+    </Suspense>
   );
 }

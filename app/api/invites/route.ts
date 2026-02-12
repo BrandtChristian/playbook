@@ -155,7 +155,12 @@ export async function POST(request: NextRequest) {
       if (linkError) {
         console.error("Failed to generate magic link:", linkError);
       } else {
-        magicLinkUrl = linkData?.properties?.action_link;
+        // Use hashed_token instead of action_link to avoid email link scanners
+        // (e.g. Outlook SafeLinks) consuming the one-time token before the user clicks
+        const tokenHash = linkData?.properties?.hashed_token;
+        if (tokenHash) {
+          magicLinkUrl = `${origin}/auth/accept?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`;
+        }
       }
     } else {
       // New user — create via admin API
@@ -187,7 +192,10 @@ export async function POST(request: NextRequest) {
       if (linkError) {
         console.error("Failed to generate magic link:", linkError);
       } else {
-        magicLinkUrl = linkData?.properties?.action_link;
+        const tokenHash = linkData?.properties?.hashed_token;
+        if (tokenHash) {
+          magicLinkUrl = `${origin}/auth/accept?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`;
+        }
       }
     }
 
@@ -310,12 +318,15 @@ export async function PATCH(request: NextRequest) {
       options: { redirectTo: `${origin}/auth/accept` },
     });
 
-  if (linkError || !linkData?.properties?.action_link) {
+  const tokenHash = linkData?.properties?.hashed_token;
+  if (linkError || !tokenHash) {
     return NextResponse.json(
       { error: "Failed to generate login link" },
       { status: 500 }
     );
   }
+
+  const magicLinkUrl = `${origin}/auth/accept?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`;
 
   // Send invite email
   try {
@@ -323,7 +334,7 @@ export async function PATCH(request: NextRequest) {
       org,
       email,
       targetProfile.role,
-      linkData.properties.action_link
+      magicLinkUrl
     );
   } catch (emailError) {
     console.error("Failed to send invite email:", emailError);
