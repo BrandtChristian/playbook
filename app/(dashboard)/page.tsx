@@ -3,10 +3,9 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import {
-  Notebook,
+  TreeStructure,
   PaperPlaneTilt,
   Users,
   EnvelopeSimple,
@@ -18,11 +17,10 @@ import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 const quickActions = [
   {
-    title: "Browse Playbooks",
-    description: "Get started with proven email strategies",
-    href: "/playbooks",
-    icon: Notebook,
-    badge: "Start here",
+    title: "Build a Flow",
+    description: "Create automated email journeys",
+    href: "/flows",
+    icon: TreeStructure,
   },
   {
     title: "Create Campaign",
@@ -101,7 +99,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Follow the steps below to connect your sending infrastructure, import your contacts, and launch your first campaign with AI-powered playbooks.
+                Follow the steps below to connect your sending infrastructure, import your contacts, and launch your first automated flow.
               </p>
             </CardContent>
           </Card>
@@ -137,12 +135,7 @@ export default async function DashboardPage() {
           <Link key={action.href} href={action.href}>
             <Card className="h-full transition-colors hover:border-primary/50 hover:bg-muted/50">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <action.icon className="h-8 w-8 text-primary" weight="duotone" />
-                  {action.badge && (
-                    <Badge variant="secondary">{action.badge}</Badge>
-                  )}
-                </div>
+                <action.icon className="h-8 w-8 text-primary" weight="duotone" />
                 <CardTitle className="flex items-center gap-2 text-lg">
                   {action.title}
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />

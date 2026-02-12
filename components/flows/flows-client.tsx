@@ -25,10 +25,40 @@ import {
   EnvelopeSimple,
   Clock,
   SignOut,
+  HandWaving,
+  Newspaper,
+  ArrowCounterClockwise,
+  Megaphone,
+  RocketLaunch,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 
 type FlowWithNodes = Flow & { flow_nodes: FlowNode[] };
+
+type PlaybookStep = {
+  title: string;
+  description: string;
+  template_id: string;
+  delay_days: number;
+};
+
+type Playbook = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  steps: PlaybookStep[];
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PLAYBOOK_ICONS: Record<string, React.ComponentType<any>> = {
+  HandWaving,
+  Newspaper,
+  ArrowCounterClockwise,
+  Megaphone,
+  RocketLaunch,
+};
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400",
@@ -48,6 +78,7 @@ export function FlowsClient({
   emails: initialEmails,
   templates,
   segments,
+  playbooks,
   orgId,
   fromName,
 }: {
@@ -55,6 +86,7 @@ export function FlowsClient({
   emails: { id: string; name: string; subject: string; body_html: string }[];
   templates: { id: string; name: string; subject: string; body_html: string; is_system: boolean }[];
   segments: { id: string; name: string; contact_count: number }[];
+  playbooks: Playbook[];
   orgId: string;
   fromName: string;
 }) {
@@ -63,6 +95,7 @@ export function FlowsClient({
   const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<Playbook | null>(null);
   const [creating, setCreating] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -88,23 +121,46 @@ export function FlowsClient({
 
       if (error || !flow) throw error;
 
-      // Create default nodes: trigger + exit
-      const triggerNode = {
-        flow_id: flow.id,
-        type: "trigger",
-        position: 0,
-        config: {},
-      };
-      const exitNode = {
-        flow_id: flow.id,
-        type: "exit",
-        position: 1,
-        config: { reason: "completed" },
-      };
+      // Build nodes based on whether a template was selected
+      let nodeInserts: { flow_id: string; type: string; position: number; config: Record<string, unknown> }[];
+
+      if (selectedTemplate) {
+        // Pre-populate from playbook steps: trigger → (send + delay)* → send → exit
+        nodeInserts = [{ flow_id: flow.id, type: "trigger", position: 0, config: {} }];
+        let pos = 1;
+
+        selectedTemplate.steps.forEach((step, i) => {
+          // Add delay before this step (if delay_days > 0 and not the first step)
+          if (step.delay_days > 0 && i > 0) {
+            nodeInserts.push({
+              flow_id: flow.id,
+              type: "delay",
+              position: pos++,
+              config: { duration: step.delay_days - (selectedTemplate.steps[i - 1]?.delay_days ?? 0), unit: "days" },
+            });
+          }
+
+          // Add send_email node (empty — user picks the email later)
+          nodeInserts.push({
+            flow_id: flow.id,
+            type: "send_email",
+            position: pos++,
+            config: { email_id: null, subject_override: null },
+          });
+        });
+
+        nodeInserts.push({ flow_id: flow.id, type: "exit", position: pos, config: { reason: "completed" } });
+      } else {
+        // Blank flow: trigger + exit
+        nodeInserts = [
+          { flow_id: flow.id, type: "trigger", position: 0, config: {} },
+          { flow_id: flow.id, type: "exit", position: 1, config: { reason: "completed" } },
+        ];
+      }
 
       const { data: nodes } = await supabase
         .from("flow_nodes")
-        .insert([triggerNode, exitNode])
+        .insert(nodeInserts)
         .select();
 
       const newFlow: FlowWithNodes = {
@@ -115,8 +171,9 @@ export function FlowsClient({
       setFlows([newFlow, ...flows]);
       setShowCreate(false);
       setNewName("");
+      setSelectedTemplate(null);
       setEditingFlowId(flow.id);
-      toast.success("Flow created");
+      toast.success(selectedTemplate ? `Flow created from "${selectedTemplate.name}"` : "Flow created");
     } catch {
       toast.error("Failed to create flow");
     } finally {
@@ -271,12 +328,61 @@ export function FlowsClient({
       )}
 
       {/* Create dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
+      <Dialog open={showCreate} onOpenChange={(open) => {
+        setShowCreate(open);
+        if (!open) { setSelectedTemplate(null); setNewName(""); }
+      }}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create a new flow</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 py-2">
+          <div className="grid gap-4 py-2">
+            {/* Template picker */}
+            {playbooks.length > 0 && (
+              <div className="grid gap-2">
+                <Label className="text-xs text-muted-foreground">Start from a template</Label>
+                <div className="grid gap-1.5">
+                  {playbooks.map((pb) => {
+                    const Icon = PLAYBOOK_ICONS[pb.icon] || Lightning;
+                    const isSelected = selectedTemplate?.id === pb.id;
+                    const maxDays = Math.max(...pb.steps.map((s) => s.delay_days), 0);
+                    return (
+                      <button
+                        key={pb.id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedTemplate(null);
+                            setNewName("");
+                          } else {
+                            setSelectedTemplate(pb);
+                            setNewName(pb.name);
+                          }
+                        }}
+                        className={`flex items-center gap-3 p-2.5 text-left transition-colors border ${
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-transparent hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-center h-8 w-8 bg-muted shrink-0">
+                          <Icon className="h-4 w-4" weight="duotone" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{pb.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {pb.steps.length} email{pb.steps.length !== 1 ? "s" : ""}
+                            {maxDays > 0 && <> &middot; {maxDays} days</>}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Name input */}
             <div className="grid gap-1.5">
               <Label htmlFor="flow-name">Flow name</Label>
               <Input
@@ -285,7 +391,7 @@ export function FlowsClient({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                autoFocus
+                autoFocus={!playbooks.length}
               />
             </div>
           </div>

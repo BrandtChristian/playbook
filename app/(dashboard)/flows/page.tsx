@@ -7,7 +7,7 @@ export default async function FlowsPage() {
   const supabase = await createClient();
   const orgId = user.organizations.id;
 
-  const [{ data: flows }, { data: emails }, { data: templates }, { data: segments }] =
+  const [{ data: flows }, { data: emails }, { data: templates }, { data: segments }, { data: playbooks }] =
     await Promise.all([
       supabase
         .from("flows")
@@ -29,6 +29,10 @@ export default async function FlowsPage() {
         .select("id, name, contact_count")
         .eq("org_id", orgId)
         .order("name"),
+      supabase
+        .from("playbooks")
+        .select("id, name, description, category, icon, steps")
+        .order("name"),
     ]);
 
   return (
@@ -37,6 +41,7 @@ export default async function FlowsPage() {
       emails={emails ?? []}
       templates={templates ?? []}
       segments={segments ?? []}
+      playbooks={playbooks ?? []}
       orgId={orgId}
       fromName={user.organizations.from_name ?? user.organizations.name}
     />

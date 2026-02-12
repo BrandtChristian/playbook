@@ -26,7 +26,7 @@ const STEPS = [
   { key: "contacts_imported", label: "Import contacts", description: "Add the people you want to reach \u2014 manually or via CSV.", href: "/contacts" },
   { key: "segment_created", label: "Create a segment", description: "Group contacts for targeted campaigns.", href: "/segments" },
   { key: "brand_built", label: "Build brand template", description: "Set your colors, logo, and footer for consistent emails.", href: "/templates" },
-  { key: "playbook_launched", label: "Launch a playbook", description: "Use a proven email strategy \u2014 AI writes the content for you.", href: "/playbooks" },
+  { key: "playbook_launched", label: "Build a flow", description: "Create an automated email journey \u2014 start from a template or from scratch.", href: "/flows" },
   { key: "campaign_sent", label: "Send first campaign", description: "Hit send and watch the stats roll in.", href: "/campaigns" },
 ] as const;
 

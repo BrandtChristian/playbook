@@ -6,7 +6,6 @@ import {
   EnvelopeSimple,
   Envelope,
   Users,
-  Notebook,
   PaperPlaneTilt,
   Gear,
   ListDashes,
@@ -32,7 +31,6 @@ import { UserMenu } from "@/components/user-menu";
 
 const navItems = [
   { title: "Dashboard", href: "/", icon: Lightning },
-  { title: "Playbooks", href: "/playbooks", icon: Notebook },
   { title: "Flows", href: "/flows", icon: TreeStructure },
   { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt },
   { title: "Emails", href: "/emails", icon: Envelope },
