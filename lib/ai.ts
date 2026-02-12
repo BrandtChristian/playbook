@@ -19,4 +19,5 @@ export type GenerateRequest = {
   prompt: string;
   context?: string;
   currentContent?: string;
+  structure?: string[];
 };

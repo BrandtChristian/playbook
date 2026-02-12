@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## First Steps — Read This Every Conversation
+
+This is a **5-day hackathon project** (Anthropic hackathon). Speed and demo-readiness matter more than perfection. At the start of every new conversation:
+
+1. **Read `PROJECT_PLAN.md`** — it contains the full sprint plan with day-by-day status (Days 1-4 DONE, Day 5 is demo prep + deploy). Check what's marked TODO vs DONE to understand current priorities.
+2. **Check `git log --oneline -5`** — see what was just shipped so you don't duplicate or regress recent work.
+3. **Understand the demo narrative**: "Small business signs up → platform shows playbooks → AI helps write content → sending emails in minutes, not days." Every change should serve this story.
+
+### Hackathon Priorities
+
+- **Demo polish over engineering**: Loading states, empty states, error toasts, and responsive layout matter more than abstracting code.
+- **Don't break what works**: Days 1-4 built a full working pipeline (auth → contacts → templates → playbooks → AI → campaigns → send). Protect this flow.
+- **Vercel deployment**: The app deploys to Vercel. Run `npm run build` to catch errors before suggesting changes are done — there are no tests, so the build is the safety net.
+- **Supabase MCP**: Database schema changes and seed data are applied via the Supabase MCP tools (not local CLI). Migrations live in `supabase/migrations/` for reference but were applied through MCP.
+
+## Learning from mistakes
+Whenever we encounter something, that didn't work as expected - difficulty querying SQL, a test not launching, whatever, note it in a LEARNINGS.md file in root, and ensure you read it every time we start a fresh conversation, to ensure we learn from mistakes and keep becoming more intelligent.
+
 ## Commands
 
 ```bash

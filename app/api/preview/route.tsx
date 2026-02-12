@@ -28,5 +28,8 @@ export async function POST(request: NextRequest) {
     />
   );
 
-  return NextResponse.json({ html });
+  // Inject ResizeObserver script so the parent iframe auto-sizes
+  const heightScript = `<script>new ResizeObserver(()=>{window.parent.postMessage({type:'preview-height',height:document.body.scrollHeight},'*')}).observe(document.body)</script>`;
+
+  return NextResponse.json({ html: html + heightScript });
 }

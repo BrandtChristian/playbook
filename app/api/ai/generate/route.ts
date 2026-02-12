@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { type, prompt, context, currentContent } =
+  const { type, prompt, context, currentContent, structure } =
     (await request.json()) as GenerateRequest;
 
   if (!prompt) {
@@ -31,7 +31,27 @@ export async function POST(request: NextRequest) {
       break;
 
     case "body":
-      userMessage = `Write an email body for:\n\nDescription: ${prompt}${context ? `\nContext: ${context}` : ""}\n\nReturn ONLY the HTML email body content. Use Liquid variables ({{ first_name }}, {{ company }}) for personalization.`;
+      if (structure && structure.length > 0) {
+        const blockList = structure
+          .map((t, i) => `${i + 1}. ${t.toUpperCase()}`)
+          .join("\n");
+        userMessage = `Write email content for: ${prompt}${context ? `\nContext: ${context}` : ""}
+
+The email has this block layout (fill each block in order):
+${blockList}
+
+Return a JSON array where each element matches a block:
+- heading: { "text": "heading text here" }
+- text: { "html": "<p>paragraph text here</p>" }
+- button: { "text": "button label", "url": "https://example.com" }
+- image: null (skip)
+- divider: null (skip)
+- spacer: null (skip)
+
+Return ONLY the JSON array, no markdown fences, no explanation. Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
+      } else {
+        userMessage = `Write an email body for:\n\nDescription: ${prompt}${context ? `\nContext: ${context}` : ""}\n\nReturn ONLY the HTML email body content. Use Liquid variables ({{ first_name }}, {{ company }}) for personalization.`;
+      }
       break;
 
     case "improve":

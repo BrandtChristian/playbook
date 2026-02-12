@@ -35,10 +35,14 @@ export function AiContentPanel({
   currentBody,
   onInsertBody,
   onInsertSubject,
+  onInsertBlocks,
+  blockStructure,
 }: {
   currentBody: string;
   onInsertBody: (html: string) => void;
   onInsertSubject: (subject: string) => void;
+  onInsertBlocks?: (html: string) => void;
+  blockStructure?: string[];
 }) {
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<AiMode>("body");
@@ -62,6 +66,10 @@ export function AiContentPanel({
           type: mode,
           prompt: prompt.trim(),
           currentContent: mode === "improve" ? currentBody : undefined,
+          structure:
+            mode === "body" && blockStructure && blockStructure.length > 0
+              ? blockStructure
+              : undefined,
         }),
       });
 
@@ -89,6 +97,9 @@ export function AiContentPanel({
         onInsertSubject(cleaned);
         toast.success("Subject line inserted");
       }
+    } else if (onInsertBlocks) {
+      onInsertBlocks(result);
+      toast.success("Content inserted as blocks");
     } else {
       onInsertBody(result);
       toast.success("Content inserted into editor");
@@ -181,7 +192,9 @@ export function AiContentPanel({
                 ? "Subject Lines"
                 : mode === "improve"
                   ? "Improved Version"
-                  : "Email Body"}
+                  : blockStructure && blockStructure.length > 0
+                    ? "& Fill Blocks"
+                    : "Email Body"}
             </>
           )}
         </Button>

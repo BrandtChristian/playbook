@@ -1,0 +1,221 @@
+"use client";
+
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { motion, AnimatePresence } from "motion/react";
+import { DotsSixVertical, StackSimple } from "@phosphor-icons/react";
+import type { EmailBlock } from "@/lib/email/blocks";
+import { BlockRenderer } from "./block-renderer";
+import { BlockProperties } from "./block-properties";
+
+const TYPE_LABELS: Record<string, string> = {
+  heading: "H",
+  text: "TEXT",
+  button: "BTN",
+  image: "IMG",
+  divider: "DIV",
+  spacer: "GAP",
+};
+
+function DropIndicatorLine() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scaleX: 0.3 }}
+      animate={{ opacity: 1, scaleX: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="h-0.5 bg-orange-500 my-1 relative origin-left"
+    >
+      <div className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-orange-500" />
+    </motion.div>
+  );
+}
+
+function SortableBlock({
+  block,
+  selected,
+  showDropIndicator,
+  onSelect,
+  onUpdate,
+  onDelete,
+  onDuplicate,
+}: {
+  block: EmailBlock;
+  selected: boolean;
+  showDropIndicator: boolean;
+  onSelect: () => void;
+  onUpdate: (updated: EmailBlock) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: block.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      style={style}
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -20, transition: { duration: 0.15 } }}
+      className={`group relative ${isDragging ? "z-50" : ""}`}
+    >
+      {/* Drop indicator line above this block */}
+      <AnimatePresence>
+        {showDropIndicator && <DropIndicatorLine />}
+      </AnimatePresence>
+
+      {/* Dragging placeholder */}
+      {isDragging ? (
+        <div className="border-2 border-dashed border-stone-200 bg-stone-50/50 px-3 py-2 min-h-[40px]" />
+      ) : (
+        <div
+          className={`relative transition-all duration-150 ${
+            selected
+              ? "ring-2 ring-orange-400 ring-offset-1 bg-white shadow-sm"
+              : "bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
+          }`}
+        >
+          {/* Drag handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="absolute -left-7 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity p-1 text-stone-300 hover:text-stone-500"
+          >
+            <DotsSixVertical className="h-4 w-4" weight="bold" />
+          </div>
+
+          {/* Type badge (top-right) */}
+          {selected && (
+            <span className="absolute -top-2.5 right-2 text-[9px] font-bold uppercase tracking-wider text-stone-400 bg-stone-100 px-1.5 py-0.5 leading-none">
+              {TYPE_LABELS[block.type] || block.type}
+            </span>
+          )}
+
+          {/* Block content */}
+          <div className="px-3 py-2">
+            <BlockRenderer
+              block={block}
+              selected={selected}
+              onUpdate={onUpdate}
+              onClick={onSelect}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Inline properties panel */}
+      <AnimatePresence>
+        {selected && !isDragging && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <BlockProperties
+              block={block}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onDuplicate={onDuplicate}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+export function BlockCanvas({
+  blocks,
+  selectedBlockId,
+  overId,
+  isDragging,
+  onSelectBlock,
+  onUpdateBlock,
+  onDeleteBlock,
+  onDuplicateBlock,
+}: {
+  blocks: EmailBlock[];
+  selectedBlockId: string | null;
+  overId: string | null;
+  isDragging: boolean;
+  onSelectBlock: (id: string | null) => void;
+  onUpdateBlock: (id: string, updated: EmailBlock) => void;
+  onDeleteBlock: (id: string) => void;
+  onDuplicateBlock: (id: string) => void;
+}) {
+  return (
+    <div
+      className="min-h-[400px] pl-8"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle, #d6d3d1 0.5px, transparent 0.5px)",
+        backgroundSize: "16px 16px",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onSelectBlock(null);
+      }}
+    >
+      {blocks.length === 0 ? (
+        <div
+          className={`flex flex-col items-center justify-center min-h-[300px] border-2 border-dashed transition-colors ${
+            isDragging
+              ? "border-orange-400 bg-orange-50/30"
+              : "border-stone-200"
+          }`}
+        >
+          <StackSimple
+            className={`h-8 w-8 mb-2 ${isDragging ? "text-orange-400" : "text-stone-300"}`}
+          />
+          <span
+            className={`text-sm ${isDragging ? "text-orange-500 font-medium" : "text-stone-400"}`}
+          >
+            {isDragging
+              ? "Drop here"
+              : "Drag blocks here or click to add"}
+          </span>
+        </div>
+      ) : (
+        <SortableContext
+          items={blocks.map((b) => b.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="flex flex-col gap-1 py-2">
+            <AnimatePresence initial={false}>
+              {blocks.map((block) => (
+                <SortableBlock
+                  key={block.id}
+                  block={block}
+                  selected={selectedBlockId === block.id}
+                  showDropIndicator={isDragging && overId === block.id}
+                  onSelect={() => onSelectBlock(block.id)}
+                  onUpdate={(updated) => onUpdateBlock(block.id, updated)}
+                  onDelete={() => onDeleteBlock(block.id)}
+                  onDuplicate={() => onDuplicateBlock(block.id)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        </SortableContext>
+      )}
+    </div>
+  );
+}
