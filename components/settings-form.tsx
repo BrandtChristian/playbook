@@ -526,27 +526,43 @@ export function SettingsForm({
               <Button
                 type="button"
                 variant="outline"
-                disabled={testingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicStagingUrl}
+                disabled={testingAgillic || !agillicStagingKey || !agillicStagingSecret}
                 onClick={async () => {
                   setTestingAgillic(true);
+                  const results: string[] = [];
+                  let allOk = true;
                   try {
-                    const res = await fetch("/api/agillic/validate", {
+                    // Test staging
+                    const stagRes = await fetch("/api/agillic/validate", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ api_key: agillicStagingKey, api_secret: agillicStagingSecret, instance_url: agillicStagingUrl }),
                     });
-                    if (res.ok) {
-                      toast.success("Staging connected!");
+                    if (stagRes.ok) { results.push("Staging OK"); }
+                    else { results.push("Staging FAILED"); allOk = false; }
+
+                    // Test production (if credentials provided)
+                    if (agillicProdKey && agillicProdSecret) {
+                      const prodRes = await fetch("/api/agillic/validate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ api_key: agillicProdKey, api_secret: agillicProdSecret, instance_url: agillicProdUrl }),
+                      });
+                      if (prodRes.ok) { results.push("Production OK"); }
+                      else { results.push("Production FAILED"); allOk = false; }
+                    }
+
+                    if (allOk) {
+                      toast.success(results.join(" / "));
                       setAgillicConnected(true);
                     } else {
-                      const json = await res.json();
-                      toast.error(json.error || "Staging connection failed");
+                      toast.error(results.join(" / "));
                     }
-                  } catch { toast.error("Failed to test staging connection"); }
+                  } catch { toast.error("Connection test failed"); }
                   finally { setTestingAgillic(false); }
                 }}
               >
-                {testingAgillic ? (<><CircleNotch className="mr-2 h-4 w-4 animate-spin" />Testing...</>) : "Test Staging"}
+                {testingAgillic ? (<><CircleNotch className="mr-2 h-4 w-4 animate-spin" />Testing...</>) : "Test Connection"}
               </Button>
               <Button
                 type="button"
