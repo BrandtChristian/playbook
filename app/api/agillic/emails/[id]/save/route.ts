@@ -158,12 +158,39 @@ export async function POST(
         })),
       }));
       console.log(`[agillic-save] Edit payload:`, JSON.stringify({ campaignId: existingCampaignId, subject, blockGroups: editBlockGroups }).slice(0, 500));
-      await messaging.editCampaign(existingCampaignId, {
+      const editResult = await messaging.editCampaign(existingCampaignId, {
         subject,
         targetGroupName: targetGroupNameToUse,
         utmCampaign: email.name,
         blockGroups: editBlockGroups as import("@/lib/agillic/message-api").EditBlockGroup[],
       });
+      console.log(`[agillic-save] Edit accepted, taskId: ${editResult.taskId}`);
+
+      // Poll for task completion — the V2 :edit endpoint is async
+      if (editResult.taskId) {
+        let attempts = 0;
+        const maxAttempts = 15; // up to ~15 seconds
+        while (attempts < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1000));
+          attempts++;
+          try {
+            const status = await messaging.getTaskStatus(editResult.taskId);
+            console.log(`[agillic-save] Task poll #${attempts}: ${status.status}`);
+            if (status.status === "completed") break;
+            if (status.status === "failed") {
+              console.error(`[agillic-save] Edit task failed:`, status.details);
+              break;
+            }
+          } catch (pollErr) {
+            console.warn(`[agillic-save] Task poll error:`, pollErr);
+            break;
+          }
+        }
+        if (attempts >= maxAttempts) {
+          console.warn(`[agillic-save] Edit task did not complete within ${maxAttempts}s`);
+        }
+      }
+
       console.log(`[agillic-save] Edit OK`);
     } else {
       const campaignName = `forge-email-${emailId.slice(0, 8)}-${Date.now()}`;

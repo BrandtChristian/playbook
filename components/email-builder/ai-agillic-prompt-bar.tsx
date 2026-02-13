@@ -33,6 +33,7 @@ export function AiAgillicPromptBar({
   variables,
   selectedVariable,
   currentFieldValue,
+  currentValues,
   mode: forcedMode,
   templateName,
   onFillVariables,
@@ -43,6 +44,7 @@ export function AiAgillicPromptBar({
   variables: ParsedVariable[];
   selectedVariable: ParsedVariable | null;
   currentFieldValue?: string;
+  currentValues?: Record<string, string>;
   mode?: AiAgillicMode;
   templateName?: string;
   onFillVariables: (values: Record<string, string>) => void;
@@ -104,13 +106,30 @@ export function AiAgillicPromptBar({
           };
           break;
         }
-        case "subject":
+        case "subject": {
+          // Build context from current variable values so the AI knows the email content
+          let emailContext = "";
+          if (currentValues && Object.keys(currentValues).length > 0) {
+            const contentParts: string[] = [];
+            for (const v of variables) {
+              const val = currentValues[v.raw];
+              if (val && v.dataType !== "IMAGE") {
+                const label = v.fieldName.replace(/-/g, " ").replace(/_/g, " ");
+                contentParts.push(`${label}: ${val}`);
+              }
+            }
+            if (contentParts.length > 0) {
+              emailContext = contentParts.join("\n");
+            }
+          }
           body = {
             type: "subject",
             prompt: prompt.trim(),
             templateName,
+            context: emailContext ? emailContext.slice(0, 3800) : undefined,
           };
           break;
+        }
       }
 
       const res = await fetch("/api/ai/generate", {

@@ -204,10 +204,10 @@ export function AgillicVariableEditor({
     if (!testEmail) return;
     setSendingTest(true);
     try {
-      // Save first to ensure campaign is staged with latest content
-      if (dirty) {
-        await handleSave(true);
-      }
+      // Always save first to ensure campaign is staged with latest content
+      await handleSave(true);
+      // Small buffer for Agillic propagation (save already polls for task completion)
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       // Test the staged campaign via Agillic
       const res = await fetch(`/api/agillic/emails/${email.id}/test`, {
         method: "POST",
@@ -412,6 +412,7 @@ export function AgillicVariableEditor({
               variables={variables}
               selectedVariable={selectedVariable}
               currentFieldValue={selectedVariable ? (values[selectedVariable.raw] ?? "") : undefined}
+              currentValues={values}
               mode={aiMode}
               templateName={email.agillic_template_name}
               onFillVariables={(filled) => {
