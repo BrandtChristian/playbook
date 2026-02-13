@@ -53,12 +53,14 @@ export function AiPromptBar({
   onGenerateEmail,
   onFillBlocks,
   onImproveBlock,
+  templateName,
 }: {
   blocks: EmailBlock[];
   selectedBlockId: string | null;
   onGenerateEmail: (html: string) => void;
   onFillBlocks: (result: string) => void;
   onImproveBlock: (blockId: string, result: string) => void;
+  templateName?: string;
 }) {
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -77,13 +79,14 @@ export function AiPromptBar({
 
       switch (mode) {
         case "generate":
-          body = { type: "body", prompt: prompt.trim() };
+          body = { type: "body", prompt: prompt.trim(), templateName };
           break;
         case "fill":
           body = {
             type: "body",
             prompt: prompt.trim(),
             structure: blocks.map((b) => b.type),
+            templateName,
           };
           break;
         case "improve": {
@@ -101,6 +104,7 @@ export function AiPromptBar({
             prompt: prompt.trim(),
             blockType: selectedBlock.type,
             currentContent,
+            templateName,
           };
           break;
         }
@@ -114,7 +118,13 @@ export function AiPromptBar({
       const json = await res.json();
 
       if (!res.ok) {
-        toast.error(json.error || "AI generation failed");
+        const msg =
+          json.code === "RATE_LIMITED" && json.retryAfter
+            ? `Rate limit reached. Try again in ${json.retryAfter}s.`
+            : json.code === "VALIDATION_ERROR"
+              ? json.error
+              : "AI generation failed. Please try again.";
+        toast.error(msg);
         return;
       }
 
@@ -141,7 +151,7 @@ export function AiPromptBar({
             : "Block improved"
       );
     } catch {
-      toast.error("AI generation failed");
+      toast.error("AI generation failed. Please try again.");
     } finally {
       setGenerating(false);
     }

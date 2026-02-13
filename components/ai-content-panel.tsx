@@ -37,12 +37,14 @@ export function AiContentPanel({
   onInsertSubject,
   onInsertBlocks,
   blockStructure,
+  templateName,
 }: {
   currentBody: string;
   onInsertBody: (html: string) => void;
   onInsertSubject: (subject: string) => void;
   onInsertBlocks?: (html: string) => void;
   blockStructure?: string[];
+  templateName?: string;
 }) {
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<AiMode>("body");
@@ -70,6 +72,7 @@ export function AiContentPanel({
             mode === "body" && blockStructure && blockStructure.length > 0
               ? blockStructure
               : undefined,
+          templateName,
         }),
       });
 
@@ -77,7 +80,13 @@ export function AiContentPanel({
       if (res.ok) {
         setResult(json.result);
       } else {
-        toast.error(json.error || "AI generation failed");
+        const msg =
+          json.code === "RATE_LIMITED" && json.retryAfter
+            ? `Rate limit reached. Try again in ${json.retryAfter}s.`
+            : json.code === "VALIDATION_ERROR"
+              ? json.error
+              : "AI generation failed. Please try again.";
+        toast.error(msg);
       }
     } catch {
       toast.error("Failed to connect to AI");
@@ -90,11 +99,15 @@ export function AiContentPanel({
     if (!result) return;
 
     if (mode === "subject") {
-      // Take the first subject line suggestion (strip number prefix)
-      const firstLine = result.split("\n").find((l) => l.trim());
-      if (firstLine) {
-        const cleaned = firstLine.replace(/^\d+\.\s*/, "").trim();
-        onInsertSubject(cleaned);
+      // Parse subject lines: strip numbered prefixes, bullets, etc.
+      const lines = result
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .map((l) => l.replace(/^(\d+[\.\)]\s*|[-*]\s*|•\s*)/, "").trim())
+        .filter((l) => l.length > 0);
+      if (lines[0]) {
+        onInsertSubject(lines[0]);
         toast.success("Subject line inserted");
       }
     } else if (onInsertBlocks) {

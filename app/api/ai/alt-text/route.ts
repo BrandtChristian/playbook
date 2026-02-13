@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { anthropic } from "@/lib/ai";
+import { anthropic, AI_TEMPERATURES, type AiErrorCode } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -10,13 +10,14 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" as AiErrorCode }, { status: 401 });
   }
 
-  const { allowed } = checkRateLimit(user.id);
+  const { allowed, retryAfterMs } = checkRateLimit(user.id);
   if (!allowed) {
+    const retryAfter = Math.ceil((retryAfterMs ?? 60000) / 1000);
     return NextResponse.json(
-      { error: "Too many requests. Please wait a moment." },
+      { error: `Rate limit reached. Try again in ${retryAfter} seconds.`, code: "RATE_LIMITED" as AiErrorCode, retryAfter },
       { status: 429 }
     );
   }
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
 
   if (!imageUrl) {
     return NextResponse.json(
-      { error: "imageUrl is required" },
+      { error: "imageUrl is required", code: "VALIDATION_ERROR" as AiErrorCode },
       { status: 400 }
     );
   }
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     const parsed = new URL(imageUrl);
     if (parsed.protocol !== "https:") {
       return NextResponse.json(
-        { error: "Only HTTPS URLs are allowed" },
+        { error: "Only HTTPS URLs are allowed", code: "VALIDATION_ERROR" as AiErrorCode },
         { status: 400 }
       );
     }
@@ -51,18 +52,22 @@ export async function POST(request: Request) {
       hostname === "[::1]"
     ) {
       return NextResponse.json(
-        { error: "Private/reserved URLs are not allowed" },
+        { error: "Private/reserved URLs are not allowed", code: "VALIDATION_ERROR" as AiErrorCode },
         { status: 400 }
       );
     }
   } catch {
-    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid URL", code: "VALIDATION_ERROR" as AiErrorCode },
+      { status: 400 }
+    );
   }
 
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 128,
+      temperature: AI_TEMPERATURES["alt-text"],
       messages: [
         {
           role: "user",
@@ -83,7 +88,7 @@ export async function POST(request: Request) {
     const content = message.content[0];
     if (content.type !== "text") {
       return NextResponse.json(
-        { error: "Unexpected response" },
+        { error: "Unexpected response", code: "AI_SERVICE_ERROR" as AiErrorCode },
         { status: 500 }
       );
     }
@@ -92,7 +97,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Alt text generation error:", error);
     return NextResponse.json(
-      { error: "Alt text generation failed" },
+      { error: "Alt text generation failed. Please try again.", code: "AI_SERVICE_ERROR" as AiErrorCode },
       { status: 500 }
     );
   }

@@ -380,13 +380,23 @@ export function TemplateEditor({
         body: JSON.stringify({
           type: "subject",
           prompt: `Based on this email body, generate subject lines:\n\n${bodyHtml.slice(0, 500)}`,
+          templateName: name,
         }),
       });
       const json = await res.json();
-      if (res.ok) {
-        const firstLine = json.result.split("\n").find((l: string) => l.trim());
-        if (firstLine) {
-          setSubject(firstLine.replace(/^\d+\.\s*/, "").trim());
+      if (!res.ok) {
+        const msg =
+          json.code === "RATE_LIMITED" && json.retryAfter
+            ? `Rate limit reached. Try again in ${json.retryAfter}s.`
+            : json.error || "Failed to generate subject";
+        toast.error(msg);
+      } else {
+        // Use parsed subjects array if available, fall back to raw parsing
+        const subjects: string[] = json.subjects;
+        const firstSubject = subjects?.[0] ??
+          json.result.split("\n").find((l: string) => l.trim())?.replace(/^\d+[\.\)]\s*/, "").trim();
+        if (firstSubject) {
+          setSubject(firstSubject);
           toast.success("Subject generated");
         }
       }
@@ -566,6 +576,7 @@ export function TemplateEditor({
                 onGenerateEmail={handleGenerateEmail}
                 onFillBlocks={handleInsertBlocks}
                 onImproveBlock={handleImproveBlock}
+                templateName={name}
               />
             </TabsContent>
 

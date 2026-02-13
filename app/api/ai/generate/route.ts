@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, SYSTEM_PROMPT, type GenerateRequest } from "@/lib/ai";
+import {
+  anthropic,
+  buildSystemPrompt,
+  validateGenerateRequest,
+  parseSubjectLines,
+  AI_TEMPERATURES,
+  type GenerateRequest,
+  type OrgContext,
+  type AiErrorCode,
+} from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -75,6 +84,10 @@ function buildBlockFillSchema(structure: string[]) {
   };
 }
 
+function jsonError(error: string, code: AiErrorCode, status: number) {
+  return NextResponse.json({ error, code }, { status });
+}
+
 export async function POST(request: NextRequest) {
   // Auth check
   const supabase = await createClient();
@@ -83,26 +96,74 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonError("Unauthorized", "UNAUTHORIZED", 401);
   }
 
-  const { allowed } = checkRateLimit(user.id);
+  const { allowed, retryAfterMs } = checkRateLimit(user.id);
   if (!allowed) {
+    const retryAfter = Math.ceil((retryAfterMs ?? 60000) / 1000);
     return NextResponse.json(
-      { error: "Too many requests. Please wait a moment." },
+      {
+        error: `Rate limit reached. Try again in ${retryAfter} seconds.`,
+        code: "RATE_LIMITED" as AiErrorCode,
+        retryAfter,
+      },
       { status: 429 }
     );
   }
 
-  const { type, prompt, context, currentContent, structure, blockType } =
-    (await request.json()) as GenerateRequest;
-
-  if (!prompt) {
-    return NextResponse.json(
-      { error: "prompt is required" },
-      { status: 400 }
-    );
+  // Parse + validate request body
+  const body = (await request.json()) as GenerateRequest;
+  const validation = validateGenerateRequest(body);
+  if (!validation.valid) {
+    return jsonError(validation.error, "VALIDATION_ERROR", 400);
   }
+
+  const { type, prompt, context, currentContent, structure, blockType, templateName, emailPurpose } = body;
+
+  // Fetch org context for richer AI prompts
+  let orgContext: OrgContext | undefined;
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("org_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profile?.org_id) {
+      const [{ data: org }, { data: customFields }] = await Promise.all([
+        supabase
+          .from("organizations")
+          .select("name, from_name, brand_config")
+          .eq("id", profile.org_id)
+          .single(),
+        supabase
+          .from("custom_field_definitions")
+          .select("field_name")
+          .eq("org_id", profile.org_id),
+      ]);
+
+      if (org) {
+        orgContext = {
+          orgName: org.name,
+          fromName: org.from_name ?? undefined,
+          brandConfig: org.brand_config as OrgContext["brandConfig"],
+          customFieldNames: (customFields ?? []).map((f: { field_name: string }) => f.field_name),
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[AI Generate] Failed to fetch org context, using default prompt:", e);
+  }
+
+  const systemPrompt = buildSystemPrompt(orgContext);
+
+  // Build context suffix for user messages
+  const contextParts: string[] = [];
+  if (context) contextParts.push(`Context: ${context}`);
+  if (templateName) contextParts.push(`Template: ${templateName}`);
+  if (emailPurpose) contextParts.push(`Purpose: ${emailPurpose}`);
+  const contextSuffix = contextParts.length > 0 ? "\n" + contextParts.join("\n") : "";
 
   // Structure-aware fill: use structured outputs for guaranteed JSON
   if (type === "body" && structure && structure.length > 0) {
@@ -110,7 +171,7 @@ export async function POST(request: NextRequest) {
       .map((t, i) => `${i + 1}. ${t.toUpperCase()}`)
       .join("\n");
 
-    const userMessage = `Write email content for: ${prompt}${context ? `\nContext: ${context}` : ""}
+    const userMessage = `Write email content for: ${prompt}${contextSuffix}
 
 The email has this block layout (fill each block in order):
 ${blockList}
@@ -130,7 +191,8 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-5-20250929",
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        temperature: AI_TEMPERATURES.body,
+        system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
         output_config: {
           format: {
@@ -142,16 +204,18 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
 
       const content = message.content[0];
       if (content.type !== "text") {
-        return NextResponse.json(
-          { error: "Unexpected response" },
-          { status: 500 }
-        );
+        return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
       }
 
-      // Parse the structured output and extract just the blocks array
       console.log("[AI Generate] Structured output:", content.text.slice(0, 300));
       const parsed = JSON.parse(content.text);
-      const blocksArray = parsed.blocks || parsed;
+      const blocksArray: unknown[] = parsed.blocks || parsed;
+
+      // Pad/truncate to match structure length
+      if (Array.isArray(blocksArray)) {
+        while (blocksArray.length < structure.length) blocksArray.push(null);
+        if (blocksArray.length > structure.length) blocksArray.length = structure.length;
+      }
 
       return NextResponse.json({
         result: JSON.stringify(blocksArray),
@@ -159,10 +223,7 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
       });
     } catch (error) {
       console.error("AI generation error (structured):", error);
-      return NextResponse.json(
-        { error: "AI generation failed" },
-        { status: 500 }
-      );
+      return jsonError("AI generation failed. Please try again.", "AI_SERVICE_ERROR", 500);
     }
   }
 
@@ -171,11 +232,11 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
 
   switch (type) {
     case "subject":
-      userMessage = `Generate 3 email subject line options for this email:\n\nDescription: ${prompt}${context ? `\nContext: ${context}` : ""}\n\nReturn ONLY the 3 subject lines, one per line, numbered 1-3. Use {{ first_name }} or {{ company }} where natural. Keep under 60 characters each.`;
+      userMessage = `Generate 3 email subject line options for this email:\n\nDescription: ${prompt}${contextSuffix}\n\nReturn ONLY the 3 subject lines, one per line, numbered 1-3. Use {{ first_name }} or {{ company }} where natural. Keep under 60 characters each.`;
       break;
 
     case "body":
-      userMessage = `Write an email body for:\n\nDescription: ${prompt}${context ? `\nContext: ${context}` : ""}\n\nReturn ONLY the HTML email body content. Use Liquid variables ({{ first_name }}, {{ company }}) for personalization.`;
+      userMessage = `Write an email body for:\n\nDescription: ${prompt}${contextSuffix}\n\nReturn ONLY the HTML email body content. Use Liquid variables ({{ first_name }}, {{ company }}) for personalization.`;
       break;
 
     case "improve":
@@ -187,7 +248,7 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
       break;
 
     default:
-      return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+      return jsonError("Invalid type", "VALIDATION_ERROR", 400);
   }
 
   try {
@@ -196,25 +257,33 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      temperature: AI_TEMPERATURES[type] ?? 1.0,
+      system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });
 
     const content = message.content[0];
     if (content.type !== "text") {
-      return NextResponse.json(
-        { error: "Unexpected response" },
-        { status: 500 }
-      );
+      return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
     }
 
     console.log("[AI Generate] Result:", content.text.slice(0, 200));
+
+    // For subject lines, also return a parsed array
+    if (type === "subject") {
+      const subjects = parseSubjectLines(content.text);
+      return NextResponse.json({ result: content.text, subjects, type });
+    }
+
     return NextResponse.json({ result: content.text, type });
   } catch (error) {
     console.error("AI generation error:", error);
-    return NextResponse.json(
-      { error: "AI generation failed" },
-      { status: 500 }
-    );
+    const msg = error instanceof Error && error.message?.includes("rate")
+      ? "AI service is busy. Please try again in a moment."
+      : "AI generation failed. Please try again.";
+    const code: AiErrorCode = error instanceof Error && error.message?.includes("rate")
+      ? "RATE_LIMITED"
+      : "AI_SERVICE_ERROR";
+    return jsonError(msg, code, code === "RATE_LIMITED" ? 503 : 500);
   }
 }

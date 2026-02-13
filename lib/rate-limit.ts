@@ -23,14 +23,16 @@ export function checkRateLimit(
   userId: string,
   limit: number = 20,
   windowMs: number = 60_000
-): { allowed: boolean; remaining: number } {
+): { allowed: boolean; remaining: number; retryAfterMs?: number } {
   const now = Date.now();
   const timestamps = hits.get(userId) ?? [];
   const valid = timestamps.filter((t) => now - t < windowMs);
 
   if (valid.length >= limit) {
     hits.set(userId, valid);
-    return { allowed: false, remaining: 0 };
+    const oldest = Math.min(...valid);
+    const retryAfterMs = oldest + windowMs - now;
+    return { allowed: false, remaining: 0, retryAfterMs };
   }
 
   valid.push(now);

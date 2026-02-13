@@ -37,6 +37,7 @@ export function EmailBuilder({
   onGenerateEmail,
   onFillBlocks,
   onImproveBlock,
+  templateName,
 }: {
   blocks: EmailBlock[];
   onChange: (html: string) => void;
@@ -44,6 +45,7 @@ export function EmailBuilder({
   onGenerateEmail: (html: string) => void;
   onFillBlocks: (result: string) => void;
   onImproveBlock: (blockId: string, result: string) => void;
+  templateName?: string;
 }) {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
@@ -245,6 +247,7 @@ export function EmailBuilder({
         onGenerateEmail={onGenerateEmail}
         onFillBlocks={onFillBlocks}
         onImproveBlock={onImproveBlock}
+        templateName={templateName}
       />
 
       <div className="grid grid-cols-[160px_1fr] gap-3 min-h-[400px]">
