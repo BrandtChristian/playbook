@@ -24,6 +24,13 @@ export interface GdtTableData {
   records: Record<string, string>[];
 }
 
+export interface GdtTableWithMetadata {
+  name: string;
+  description?: string;
+  fields: GdtFieldMetadata[];
+  records: Record<string, string>[];
+}
+
 export class GlobalDataAPIClient {
   private client: AgillicClient;
 

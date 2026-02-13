@@ -14,6 +14,7 @@ import {
   User,
   TreeStructure,
   Layout,
+  Table,
 } from "@phosphor-icons/react";
 import {
   Sidebar,
@@ -30,14 +31,15 @@ import {
 import { UserMenu } from "@/components/user-menu";
 
 const allNavItems = [
-  { title: "Dashboard", href: "/", icon: Lightning, resendOnly: false },
-  { title: "Flows", href: "/flows", icon: TreeStructure, resendOnly: true },
-  { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt, resendOnly: false },
-  { title: "Emails", href: "/emails", icon: Envelope, resendOnly: false },
-  { title: "Templates", href: "/templates", icon: Layout, resendOnly: false },
-  { title: "Contacts", href: "/contacts", icon: Users, resendOnly: true },
-  { title: "Segments", href: "/segments", icon: ListDashes, resendOnly: true },
-  { title: "Data", href: "/data", icon: Database, resendOnly: true },
+  { title: "Dashboard", href: "/", icon: Lightning, resendOnly: false, agillicOnly: false },
+  { title: "Flows", href: "/flows", icon: TreeStructure, resendOnly: true, agillicOnly: false },
+  { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt, resendOnly: true, agillicOnly: false },
+  { title: "Emails", href: "/emails", icon: Envelope, resendOnly: false, agillicOnly: false },
+  { title: "Templates", href: "/templates", icon: Layout, resendOnly: true, agillicOnly: false },
+  { title: "Contacts", href: "/contacts", icon: Users, resendOnly: true, agillicOnly: false },
+  { title: "Segments", href: "/segments", icon: ListDashes, resendOnly: true, agillicOnly: false },
+  { title: "Data", href: "/data", icon: Database, resendOnly: true, agillicOnly: false },
+  { title: "GDT Editor", href: "/gdt-editor", icon: Table, resendOnly: false, agillicOnly: true },
 ];
 
 const settingsItems = [
@@ -49,7 +51,7 @@ export function AppSidebar({ emailProvider = "resend" }: { emailProvider?: "rese
   const pathname = usePathname();
   const navItems = emailProvider === "agillic"
     ? allNavItems.filter((item) => !item.resendOnly)
-    : allNavItems;
+    : allNavItems.filter((item) => !item.agillicOnly);
 
   return (
     <Sidebar>
