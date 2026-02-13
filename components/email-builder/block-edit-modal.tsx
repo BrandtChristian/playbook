@@ -19,8 +19,7 @@ import {
   PlayCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
-
-type AssetImage = { name: string; url: string; created_at: string };
+import { AssetSelector } from "@/components/assets/asset-selector";
 
 export function BlockEditModal({
   block,
@@ -74,9 +73,7 @@ function ImageEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [generatingAlt, setGeneratingAlt] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [assets, setAssets] = useState<AssetImage[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [showAssetSelector, setShowAssetSelector] = useState(false);
   const [localBlock, setLocalBlock] = useState(block);
 
   function update(partial: Partial<typeof block>) {
@@ -95,7 +92,6 @@ function ImageEditor({
       if (res.ok) {
         update({ src: json.url });
         toast.success("Image uploaded");
-        // Auto alt text
         fetch("/api/ai/alt-text", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -109,17 +105,6 @@ function ImageEditor({
       }
     } catch { toast.error("Upload failed"); }
     finally { setUploading(false); }
-  }
-
-  async function loadAssets() {
-    setShowLibrary(true);
-    if (assets.length > 0) return;
-    setLoadingAssets(true);
-    try {
-      const res = await fetch("/api/images");
-      const json = await res.json();
-      if (res.ok) setAssets(json.images || []);
-    } catch {} finally { setLoadingAssets(false); }
   }
 
   async function generateAlt() {
@@ -141,6 +126,22 @@ function ImageEditor({
 
   return (
     <div className="space-y-4">
+      <AssetSelector
+        isOpen={showAssetSelector}
+        onClose={() => setShowAssetSelector(false)}
+        onSelect={(asset) => {
+          update({ src: asset.url });
+          // Auto-generate alt text
+          fetch("/api/ai/alt-text", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: asset.url }),
+          })
+            .then((r) => r.json())
+            .then((data) => { if (data.alt) update({ src: asset.url, alt: data.alt }); })
+            .catch(() => {});
+        }}
+      />
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
 
@@ -152,29 +153,6 @@ function ImageEditor({
             onClick={() => update({ src: "" })}>
             Change
           </Button>
-        </div>
-      ) : showLibrary ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Asset Library</span>
-            <button className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300" onClick={() => setShowLibrary(false)}>
-              Back to upload
-            </button>
-          </div>
-          {loadingAssets ? (
-            <div className="flex items-center justify-center py-8"><CircleNotch className="h-5 w-5 animate-spin text-stone-400 dark:text-stone-500" /></div>
-          ) : assets.length === 0 ? (
-            <div className="text-center py-6 text-xs text-stone-400 dark:text-stone-500">No images uploaded yet</div>
-          ) : (
-            <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-              {assets.map((a) => (
-                <button key={a.name} onClick={() => { update({ src: a.url }); setShowLibrary(false); }}
-                  className="aspect-square overflow-hidden border border-stone-100 dark:border-stone-700 hover:border-indigo-400 hover:ring-1 hover:ring-indigo-400 transition-all">
-                  <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       ) : (
         <div
@@ -189,9 +167,9 @@ function ImageEditor({
             <>
               <UploadSimple className="h-8 w-8 text-stone-400 dark:text-stone-500" />
               <span className="text-sm text-stone-500 dark:text-stone-400">Drop image or click to upload</span>
-              <button onClick={(e) => { e.stopPropagation(); loadAssets(); }}
+              <button onClick={(e) => { e.stopPropagation(); setShowAssetSelector(true); }}
                 className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
-                Browse library
+                Browse assets
               </button>
             </>
           )}

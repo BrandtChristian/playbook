@@ -15,9 +15,11 @@ import {
   Lightning,
   CircleNotch,
   X,
+  ImageSquare,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { AssetSelector } from "@/components/assets/asset-selector";
 
 const VARIABLE_TAGS = [
   "{{ first_name }}",
@@ -316,6 +318,8 @@ function ImageProperties({
   block: Extract<EmailBlock, { type: "image" }>;
   onUpdate: (updated: EmailBlock) => void;
 }) {
+  const [showAssetSelector, setShowAssetSelector] = useState(false);
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -342,6 +346,23 @@ function ImageProperties({
   }
 
   return (
+    <>
+    <AssetSelector
+      isOpen={showAssetSelector}
+      onClose={() => setShowAssetSelector(false)}
+      onSelect={(asset) => {
+        onUpdate({ ...block, src: asset.url });
+        // Auto-generate alt text
+        fetch("/api/ai/alt-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: asset.url }),
+        })
+          .then((r) => r.json())
+          .then((data) => { if (data.alt) onUpdate({ ...block, src: asset.url, alt: data.alt }); })
+          .catch(() => {});
+      }}
+    />
     <div className="flex flex-col gap-2">
       <div className="flex gap-2">
         <div className="flex-1">
@@ -362,6 +383,14 @@ function ImageProperties({
             onChange={handleUpload}
           />
         </label>
+        <button
+          className="inline-flex items-center gap-1 px-2 h-7 text-xs bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors"
+          onClick={() => setShowAssetSelector(true)}
+          title="Browse asset library"
+        >
+          <ImageSquare className="h-3 w-3" />
+          Browse
+        </button>
         <button
           className="inline-flex items-center gap-1 px-2 h-7 text-xs bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors"
           onClick={() => onUpdate({ ...block, src: "" })}
@@ -420,6 +449,7 @@ function ImageProperties({
         <span className="text-[10px] text-stone-400 dark:text-stone-500">px</span>
       </div>
     </div>
+    </>
   );
 }
 

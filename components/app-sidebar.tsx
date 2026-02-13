@@ -15,6 +15,7 @@ import {
   TreeStructure,
   Layout,
   Table,
+  ImageSquare,
 } from "@phosphor-icons/react";
 import {
   Sidebar,
@@ -39,6 +40,7 @@ const allNavItems = [
   { title: "Contacts", href: "/contacts", icon: Users, resendOnly: true, agillicOnly: false },
   { title: "Segments", href: "/segments", icon: ListDashes, resendOnly: true, agillicOnly: false },
   { title: "Data", href: "/data", icon: Database, resendOnly: true, agillicOnly: false },
+  { title: "Assets", href: "/assets", icon: ImageSquare, resendOnly: false, agillicOnly: true },
   { title: "GDT Editor", href: "/gdt-editor", icon: Table, resendOnly: false, agillicOnly: true },
 ];
 

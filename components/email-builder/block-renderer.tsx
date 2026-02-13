@@ -25,6 +25,7 @@ import {
   TiktokLogo,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { AssetSelector } from "@/components/assets/asset-selector";
 
 export function BlockRenderer({
   block,
@@ -201,8 +202,6 @@ function ButtonRenderer({
   );
 }
 
-type AssetImage = { name: string; url: string; created_at: string };
-
 function ImageRenderer({
   block,
   onUpdate,
@@ -215,9 +214,7 @@ function ImageRenderer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [assets, setAssets] = useState<AssetImage[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [showAssetSelector, setShowAssetSelector] = useState(false);
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -274,28 +271,24 @@ function ImageRenderer({
     }
   }
 
-  async function openLibrary() {
-    setShowLibrary(true);
-    onClick();
-    if (assets.length > 0) return;
-    setLoadingAssets(true);
-    try {
-      const res = await fetch("/api/images");
-      const json = await res.json();
-      if (res.ok) setAssets(json.images || []);
-    } catch {
-      // silent
-    } finally {
-      setLoadingAssets(false);
-    }
-  }
-
-  function selectAsset(url: string) {
-    onUpdate({ ...block, src: url });
-    setShowLibrary(false);
-  }
-
   return (
+    <>
+    <AssetSelector
+      isOpen={showAssetSelector}
+      onClose={() => setShowAssetSelector(false)}
+      onSelect={(asset) => {
+        onUpdate({ ...block, src: asset.url });
+        // Auto-generate alt text
+        fetch("/api/ai/alt-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: asset.url }),
+        })
+          .then((r) => r.json())
+          .then((data) => { if (data.alt) onUpdate({ ...block, src: asset.url, alt: data.alt }); })
+          .catch(() => {});
+      }}
+    />
     <div
       onClick={onClick}
       className="cursor-pointer"
@@ -332,49 +325,6 @@ function ImageRenderer({
           <span className="absolute bottom-1 right-1 z-10 bg-black/60 text-white text-[9px] px-1.5 py-0.5 leading-none opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             {block.width && block.width < 100 ? `${block.width}%` : ""}{block.width && block.width < 100 && block.maxWidth ? " · " : ""}{block.maxWidth ? `max ${block.maxWidth}px` : ""}
           </span>
-        </div>
-      ) : showLibrary ? (
-        /* Asset library browser */
-        <div
-          className="w-full border-2 border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 p-3"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-              Asset Library
-            </span>
-            <button
-              className="text-[11px] text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
-              onClick={() => setShowLibrary(false)}
-            >
-              Back to upload
-            </button>
-          </div>
-          {loadingAssets ? (
-            <div className="flex items-center justify-center py-8 text-stone-400 dark:text-stone-500">
-              <CircleNotch className="h-5 w-5 animate-spin" />
-            </div>
-          ) : assets.length === 0 ? (
-            <div className="text-center py-6 text-xs text-stone-400 dark:text-stone-500">
-              No images uploaded yet
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto">
-              {assets.map((asset) => (
-                <button
-                  key={asset.name}
-                  onClick={() => selectAsset(asset.url)}
-                  className="aspect-square overflow-hidden border border-stone-100 dark:border-stone-700 hover:border-indigo-400 hover:ring-1 hover:ring-indigo-400 dark:border-stone-700 transition-all"
-                >
-                  <img
-                    src={asset.url}
-                    alt={asset.name}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       ) : (
         /* Upload zone */
@@ -417,10 +367,10 @@ function ImageRenderer({
                   className="text-stone-500 dark:text-stone-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium underline underline-offset-2"
                   onClick={(e) => {
                     e.stopPropagation();
-                    openLibrary();
+                    setShowAssetSelector(true);
                   }}
                 >
-                  Browse library
+                  Browse assets
                 </button>
               </div>
               <span className="text-[10px] text-stone-300 dark:text-stone-600">
@@ -431,6 +381,7 @@ function ImageRenderer({
         </div>
       )}
     </div>
+    </>
   );
 }
 

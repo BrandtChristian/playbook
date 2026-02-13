@@ -23,6 +23,7 @@ import {
   Warning,
 } from "@phosphor-icons/react";
 import type { ParsedVariable } from "@/lib/agillic/webdav";
+import { AssetSelector } from "@/components/assets/asset-selector";
 import { AiAgillicPromptBar } from "@/components/email-builder/ai-agillic-prompt-bar";
 
 type AgillicVariableEditorProps = {
@@ -104,8 +105,6 @@ function renderPreview(
   return result;
 }
 
-type AssetImage = { name: string; url: string; created_at: string };
-
 /**
  * Image picker for Agillic IMAGE fields — upload, asset library, preview, alt-text.
  * Does NOT expose width/alignment controls (Agillic templates own layout).
@@ -126,9 +125,7 @@ function AgillicImageField({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [assets, setAssets] = useState<AssetImage[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [showAssetSelector, setShowAssetSelector] = useState(false);
   const [generatingAlt, setGeneratingAlt] = useState(false);
 
   async function uploadFile(file: File) {
@@ -164,21 +161,6 @@ function AgillicImageField({
     }
   }
 
-  async function loadAssets() {
-    setShowLibrary(true);
-    if (assets.length > 0) return;
-    setLoadingAssets(true);
-    try {
-      const res = await fetch("/api/images");
-      const json = await res.json();
-      if (res.ok) setAssets(json.images || []);
-    } catch {
-      // silent
-    } finally {
-      setLoadingAssets(false);
-    }
-  }
-
   async function generateAlt() {
     if (!value) return;
     setGeneratingAlt(true);
@@ -202,6 +184,23 @@ function AgillicImageField({
 
   return (
     <div className="space-y-2">
+      <AssetSelector
+        isOpen={showAssetSelector}
+        onClose={() => setShowAssetSelector(false)}
+        onSelect={(asset) => {
+          onChange(asset.url);
+          if (altVariable) {
+            fetch("/api/ai/alt-text", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrl: asset.url }),
+            })
+              .then((r) => r.json())
+              .then((data) => { if (data.alt) onAltChange(data.alt); })
+              .catch(() => {});
+          }
+        }}
+      />
       <input
         ref={fileInputRef}
         type="file"
@@ -232,45 +231,6 @@ function AgillicImageField({
             </button>
           </div>
         </div>
-      ) : showLibrary ? (
-        /* Asset library browser */
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Asset Library</span>
-            <button
-              type="button"
-              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
-              onClick={() => setShowLibrary(false)}
-            >
-              Back to upload
-            </button>
-          </div>
-          {loadingAssets ? (
-            <div className="flex items-center justify-center py-6">
-              <CircleNotch className="h-5 w-5 animate-spin text-stone-400 dark:text-stone-500" />
-            </div>
-          ) : assets.length === 0 ? (
-            <div className="text-center py-4 text-xs text-stone-400 dark:text-stone-500">
-              No images uploaded yet
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto">
-              {assets.map((a) => (
-                <button
-                  key={a.name}
-                  type="button"
-                  onClick={() => {
-                    onChange(a.url);
-                    setShowLibrary(false);
-                  }}
-                  className="aspect-square overflow-hidden border border-stone-200 dark:border-stone-700 hover:border-indigo-400 hover:ring-1 hover:ring-indigo-400 transition-all rounded"
-                >
-                  <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       ) : (
         /* Upload zone */
         <div
@@ -298,12 +258,12 @@ function AgillicImageField({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  loadAssets();
+                  setShowAssetSelector(true);
                 }}
                 className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
               >
                 <Images className="h-3 w-3" />
-                Browse library
+                Browse assets
               </button>
             </>
           )}
