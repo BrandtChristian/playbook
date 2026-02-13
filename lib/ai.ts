@@ -28,8 +28,16 @@ export type AiErrorCode =
   | "AI_SERVICE_ERROR"
   | "PARSE_ERROR";
 
+export type AgillicVariableSlot = {
+  raw: string;
+  fieldName: string;
+  type: "editable" | "blockparam";
+  dataType?: string;
+  namespace?: string;
+};
+
 export type GenerateRequest = {
-  type: "subject" | "body" | "improve" | "improve-block";
+  type: "subject" | "body" | "improve" | "improve-block" | "fill-agillic" | "improve-agillic-field";
   prompt: string;
   context?: string;
   currentContent?: string;
@@ -37,6 +45,9 @@ export type GenerateRequest = {
   blockType?: string;
   templateName?: string;
   emailPurpose?: string;
+  agillicVariables?: AgillicVariableSlot[];
+  agillicFieldName?: string;
+  agillicFieldDataType?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -48,6 +59,8 @@ export const AI_TEMPERATURES: Record<string, number> = {
   body: 1.0,
   improve: 0.6,
   "improve-block": 0.6,
+  "fill-agillic": 1.0,
+  "improve-agillic-field": 0.6,
   "alt-text": 0.3,
   brand: 0.8,
 };
@@ -173,6 +186,22 @@ export function validateGenerateRequest(
       if (!VALID_BLOCK_TYPES.has(item)) {
         return { valid: false, error: `Invalid block type in structure: ${item}` };
       }
+    }
+  }
+  if (body.type === "fill-agillic") {
+    if (!body.agillicVariables || !Array.isArray(body.agillicVariables) || body.agillicVariables.length === 0) {
+      return { valid: false, error: "agillicVariables is required for fill-agillic" };
+    }
+    if (body.agillicVariables.length > AI_LIMITS.MAX_STRUCTURE_LENGTH) {
+      return { valid: false, error: `agillicVariables must have at most ${AI_LIMITS.MAX_STRUCTURE_LENGTH} items` };
+    }
+  }
+  if (body.type === "improve-agillic-field") {
+    if (!body.currentContent && body.currentContent !== "") {
+      return { valid: false, error: "currentContent is required for improve-agillic-field" };
+    }
+    if (!body.agillicFieldName) {
+      return { valid: false, error: "agillicFieldName is required for improve-agillic-field" };
     }
   }
   return { valid: true };

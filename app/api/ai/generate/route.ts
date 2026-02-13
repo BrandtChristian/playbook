@@ -8,6 +8,7 @@ import {
   type GenerateRequest,
   type OrgContext,
   type AiErrorCode,
+  type AgillicVariableSlot,
 } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -88,6 +89,36 @@ function jsonError(error: string, code: AiErrorCode, status: number) {
   return NextResponse.json({ error, code }, { status });
 }
 
+// JSON schema for Agillic variable filling
+function buildAgillicFillSchema(variables: AgillicVariableSlot[]) {
+  const properties: Record<string, { type: "string" | "null" }> = {};
+  const required: string[] = [];
+
+  for (const v of variables) {
+    // Skip IMAGE variables — AI can't generate valid image URLs
+    if (v.dataType === "IMAGE") {
+      properties[v.raw] = { type: "null" as const };
+    } else {
+      properties[v.raw] = { type: "string" as const };
+    }
+    required.push(v.raw);
+  }
+
+  return {
+    type: "object" as const,
+    properties: {
+      variables: {
+        type: "object" as const,
+        properties,
+        required,
+        additionalProperties: false,
+      },
+    },
+    required: ["variables"],
+    additionalProperties: false,
+  };
+}
+
 export async function POST(request: NextRequest) {
   // Auth check
   const supabase = await createClient();
@@ -119,7 +150,7 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.error, "VALIDATION_ERROR", 400);
   }
 
-  const { type, prompt, context, currentContent, structure, blockType, templateName, emailPurpose } = body;
+  const { type, prompt, context, currentContent, structure, blockType, templateName, emailPurpose, agillicVariables, agillicFieldName, agillicFieldDataType } = body;
 
   // Fetch org context for richer AI prompts
   let orgContext: OrgContext | undefined;
@@ -165,6 +196,102 @@ export async function POST(request: NextRequest) {
   if (templateName) contextParts.push(`Template: ${templateName}`);
   if (emailPurpose) contextParts.push(`Purpose: ${emailPurpose}`);
   const contextSuffix = contextParts.length > 0 ? "\n" + contextParts.join("\n") : "";
+
+  // Agillic variable fill: structured JSON output keyed by variable raw name
+  if (type === "fill-agillic" && agillicVariables && agillicVariables.length > 0) {
+    const fillableVars = agillicVariables.filter((v) => v.dataType !== "IMAGE");
+    const varList = agillicVariables
+      .map((v) => {
+        const parts = [`- "${v.raw}": ${v.type === "editable" ? "Rich text (HTML)" : v.dataType === "LINK" ? "URL" : v.dataType === "IMAGE" ? "IMAGE (skip — return null)" : "Text"}`];
+        if (v.namespace) parts[0] += ` [section: ${v.namespace}]`;
+        parts[0] += ` — field: ${v.fieldName}`;
+        return parts[0];
+      })
+      .join("\n");
+
+    const userMessage = `Write email content for: ${prompt}${contextSuffix}
+
+The email template has these variable slots to fill:
+${varList}
+
+Return a "variables" object with a key for each variable.
+- For Rich text fields: write engaging HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no <html>/<body>/<head>
+- For Text fields: write plain text
+- For URL fields: write a plausible URL like "https://example.com/..."
+- For IMAGE fields: return null
+- Use Agillic personalization where natural: <persondata>FIRSTNAME</persondata>, <persondata>LASTNAME</persondata>, etc.
+- Keep content concise and professional.
+- Fields in the same section/namespace should be thematically coherent.`;
+
+    try {
+      const schema = buildAgillicFillSchema(agillicVariables);
+      console.log("[AI Generate] Agillic fill, variables:", fillableVars.length);
+
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 2048,
+        temperature: AI_TEMPERATURES["fill-agillic"],
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+        output_config: {
+          format: {
+            type: "json_schema",
+            schema,
+          },
+        },
+      });
+
+      const content = message.content[0];
+      if (content.type !== "text") {
+        return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
+      }
+
+      const parsed = JSON.parse(content.text);
+      const variables = parsed.variables || parsed;
+
+      return NextResponse.json({ result: JSON.stringify(variables), type });
+    } catch (error) {
+      console.error("AI generation error (agillic fill):", error);
+      return jsonError("AI generation failed. Please try again.", "AI_SERVICE_ERROR", 500);
+    }
+  }
+
+  // Agillic field improve: plain text response for a single field
+  if (type === "improve-agillic-field") {
+    const fieldType = agillicFieldDataType === "LINK" ? "URL" : agillicFieldDataType === "IMAGE" ? "image URL" : "text/HTML";
+    const userMessage = `Improve this ${fieldType} content for an email field called "${agillicFieldName || "field"}".
+
+Current content:
+${currentContent}
+
+Instructions: ${prompt}${contextSuffix}
+
+Return ONLY the improved content:
+- For text/HTML fields: return HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no markdown, no <html>/<body>/<head>
+- For URL fields: return only the URL
+- Preserve any <persondata>FIELDNAME</persondata> tags
+- No explanation, no markdown fences.`;
+
+    try {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 1024,
+        temperature: AI_TEMPERATURES["improve-agillic-field"],
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+      });
+
+      const content = message.content[0];
+      if (content.type !== "text") {
+        return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
+      }
+
+      return NextResponse.json({ result: content.text, type });
+    } catch (error) {
+      console.error("AI generation error (agillic improve):", error);
+      return jsonError("AI generation failed. Please try again.", "AI_SERVICE_ERROR", 500);
+    }
+  }
 
   // Structure-aware fill: use structured outputs for guaranteed JSON
   if (type === "body" && structure && structure.length > 0) {

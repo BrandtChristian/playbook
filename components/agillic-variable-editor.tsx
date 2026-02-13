@@ -17,8 +17,10 @@ import {
   Link as LinkIcon,
   TextAa,
   TextT,
+  Sparkle,
 } from "@phosphor-icons/react";
 import type { ParsedVariable } from "@/lib/agillic/webdav";
+import { AiAgillicPromptBar } from "@/components/email-builder/ai-agillic-prompt-bar";
 
 type AgillicVariableEditorProps = {
   email: {
@@ -116,6 +118,9 @@ export function AgillicVariableEditor({
   const [sendingTest, setSendingTest] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [selectedVariable, setSelectedVariable] = useState<ParsedVariable | null>(null);
+  const [aiMode, setAiMode] = useState<"fill" | "improve" | "subject" | undefined>(undefined);
+  const [subjectSuggestions, setSubjectSuggestions] = useState<string[]>([]);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -263,7 +268,22 @@ export function AgillicVariableEditor({
         <div className="w-[420px] border-r overflow-y-auto p-4 space-y-4">
           {/* Subject */}
           <div className="grid gap-2">
-            <Label className="font-medium">Subject Line</Label>
+            <div className="flex items-center justify-between">
+              <Label className="font-medium">Subject Line</Label>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedVariable(null);
+                  setAiMode("subject");
+                  setSubjectSuggestions([]);
+                }}
+                className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+                title="Generate subject lines with AI"
+              >
+                <Sparkle className="h-3 w-3" />
+                AI
+              </button>
+            </div>
             <Input
               value={subject}
               onChange={(e) => {
@@ -272,6 +292,26 @@ export function AgillicVariableEditor({
               }}
               placeholder="Email subject"
             />
+            {subjectSuggestions.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Pick a subject line:</p>
+                {subjectSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setSubject(s);
+                      setDirty(true);
+                      setSubjectSuggestions([]);
+                      setAiMode(undefined);
+                    }}
+                    className="block w-full text-left text-sm px-2 py-1.5 rounded border border-input hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Target Group (required for staging) */}
@@ -314,6 +354,25 @@ export function AgillicVariableEditor({
                   <Badge variant="outline" className="text-[10px] font-normal">
                     {getFieldTypeBadge(v)}
                   </Badge>
+                  {/* Per-field AI improve button (not for IMAGE) */}
+                  {v.dataType !== "IMAGE" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedVariable(v);
+                        setAiMode("improve");
+                        setSubjectSuggestions([]);
+                      }}
+                      className={`ml-auto inline-flex items-center justify-center h-5 w-5 rounded transition-colors ${
+                        selectedVariable?.raw === v.raw
+                          ? "text-amber-600 bg-amber-100 dark:bg-amber-900/30"
+                          : "text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                      }`}
+                      title="Improve with AI"
+                    >
+                      <Sparkle className="h-3 w-3" />
+                    </button>
+                  )}
                 </Label>
                 {v.type === "editable" ? (
                   <Textarea
@@ -349,17 +408,34 @@ export function AgillicVariableEditor({
 
           {/* AI Assist */}
           <div className="border-t pt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                toast.info("AI content generation coming soon");
+            <AiAgillicPromptBar
+              variables={variables}
+              selectedVariable={selectedVariable}
+              currentFieldValue={selectedVariable ? (values[selectedVariable.raw] ?? "") : undefined}
+              mode={aiMode}
+              templateName={email.agillic_template_name}
+              onFillVariables={(filled) => {
+                setValues((prev) => {
+                  const next = { ...prev };
+                  for (const [key, val] of Object.entries(filled)) {
+                    next[key] = val;
+                  }
+                  return next;
+                });
+                setDirty(true);
               }}
-            >
-              <Lightning className="mr-2 h-4 w-4" />
-              Generate content with AI
-            </Button>
+              onImproveField={(raw, content) => {
+                updateValue(raw, content);
+              }}
+              onSelectSubject={(subjects) => {
+                setSubjectSuggestions(subjects);
+              }}
+              onClearSelection={() => {
+                setSelectedVariable(null);
+                setAiMode(undefined);
+                setSubjectSuggestions([]);
+              }}
+            />
           </div>
 
           {/* Test Email */}
