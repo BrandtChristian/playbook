@@ -129,11 +129,19 @@ export async function POST(
     const messaging = new MessageAPIClient(client);
 
     const existingCampaignId = email.agillic_campaign_id;
+    // Deterministic campaign name — same for all saves of this email
+    // Like Bifrost: "FORGE_{orgId4}_{emailId8}_{safeName}"
+    const safeName = (email.name || 'Email').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const campaignName = `FORGE_${profile.org_id.substring(0, 4)}_${emailId.substring(0, 8)}_${safeName}`;
+
     const templateBlockGroups = (template.block_groups ?? []) as Array<{ blockGroupId: string; blockId: string; messageTemplate?: string }>;
     const blockGroups = buildBlockGroups(
       template.detected_variables as Array<{ type: string; fieldName: string; namespace?: string; raw: string }>,
       variables || {},
-      templateBlockGroups,      email.agillic_template_name || '',    );
+      templateBlockGroups,
+      email.agillic_template_name || '',
+      campaignName,
+    );
 
     console.log(`[agillic-save] Block groups built: ${blockGroups.length} groups (filtered from ${templateBlockGroups.filter(bg => !bg.blockGroupId.includes("footer")).length} non-footer groups)`);
     console.log(`[agillic-save] Existing campaign ID: ${existingCampaignId || "none (first save)"}`);
@@ -150,7 +158,7 @@ export async function POST(
 
     if (existingCampaignId) {
       console.log(`[agillic-save] Editing existing campaign: ${existingCampaignId}`);
-      // Edit format: ste and blockId from messages (stage-only fields)
+      // Edit format: strip blockGroupId, messageTemplate, blockId (stage-only fields)
       const editBlockGroups = blockGroups.map((bg) => ({
         messages: bg.messages.map((msg) => ({
           name: msg.name,
@@ -158,42 +166,71 @@ export async function POST(
         })),
       }));
       console.log(`[agillic-save] Edit payload:`, JSON.stringify({ campaignId: existingCampaignId, subject, blockGroups: editBlockGroups }).slice(0, 500));
-      const editResult = await messaging.editCampaign(existingCampaignId, {
-        subject,
-        targetGroupName: targetGroupNameToUse,
-        utmCampaign: email.name,
-        blockGroups: editBlockGroups as import("@/lib/agillic/message-api").EditBlockGroup[],
-      });
-      console.log(`[agillic-save] Edit accepted, taskId: ${editResult.taskId}`);
+      // Use V1 (synchronous) — proven working in Bifrost
+      try {
+        const editResult = await messaging.editCampaignV1(existingCampaignId, {
+          subject,
+          targetGroupName: targetGroupNameToUse,
+          utmCampaign: campaignName,
+          blockGroups: editBlockGroups as import("@/lib/agillic/message-api").EditBlockGroup[],
+        });
+        console.log(`[agillic-save] V1 Edit OK:`, JSON.stringify(editResult).slice(0, 200));
+      } catch (editErr) {
+        // Edit failed — likely message name mismatch from old staging.
+        // Re-stage with a new campaign using the correct deterministic names.
+        const errMsg = editErr instanceof Error ? editErr.message : String(editErr);
+        console.warn(`[agillic-save] Edit failed (${errMsg}), re-staging as new campaign...`);
 
-      // Poll for task completion — the V2 :edit endpoint is async
-      if (editResult.taskId) {
-        let attempts = 0;
-        const maxAttempts = 15; // up to ~15 seconds
-        while (attempts < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 1000));
-          attempts++;
-          try {
-            const status = await messaging.getTaskStatus(editResult.taskId);
-            console.log(`[agillic-save] Task poll #${attempts}: ${status.status}`);
-            if (status.status === "completed") break;
-            if (status.status === "failed") {
-              console.error(`[agillic-save] Edit task failed:`, status.details);
-              break;
-            }
-          } catch (pollErr) {
-            console.warn(`[agillic-save] Task poll error:`, pollErr);
-            break;
-          }
-        }
-        if (attempts >= maxAttempts) {
-          console.warn(`[agillic-save] Edit task did not complete within ${maxAttempts}s`);
+        try {
+          // Rebuild block groups with a unique campaign name so message names don't collide
+          const reStageCampaignName = `${campaignName}_${Date.now()}`;
+          const reStageBlockGroups = buildBlockGroups(
+            template.detected_variables as Array<{ type: string; fieldName: string; namespace?: string; raw: string }>,
+            variables || {},
+            templateBlockGroups,
+            email.agillic_template_name || '',
+            reStageCampaignName,
+          );
+          const reStagePayload: import("@/lib/agillic/message-api").StagePayload = {
+            name: reStageCampaignName,
+            subject,
+            templateName: template.template_name,
+            targetGroupName: targetGroupNameToUse,
+            utmCampaign: campaignName,
+            blockGroups: reStageBlockGroups,
+          };
+          const reStageResult = await messaging.stageCampaignV1(reStagePayload);
+          console.log(`[agillic-save] Re-stage OK: campaignId=${reStageResult.campaignId}`);
+
+          await supabase
+            .from("emails")
+            .update({ agillic_campaign_id: reStageResult.campaignId })
+            .eq("id", emailId);
+
+          return NextResponse.json({
+            success: true,
+            staged: true,
+            agillicCampaignId: reStageResult.campaignId,
+            reStaged: true,
+          });
+        } catch (reStageErr) {
+          // Both edit and re-stage failed — clear the campaign ID so next save does a fresh stage
+          const reStageMsg = reStageErr instanceof Error ? reStageErr.message : String(reStageErr);
+          console.error(`[agillic-save] Re-stage also failed (${reStageMsg}), clearing campaign ID`);
+
+          await supabase
+            .from("emails")
+            .update({ agillic_campaign_id: null })
+            .eq("id", emailId);
+
+          return NextResponse.json({
+            success: true,
+            staged: false,
+            message: `Saved locally. Agillic edit and re-stage both failed: ${errMsg}. Campaign ID cleared — next save will create a fresh campaign.`,
+          });
         }
       }
-
-      console.log(`[agillic-save] Edit OK`);
     } else {
-      const campaignName = `forge-email-${emailId.slice(0, 8)}-${Date.now()}`;
       console.log(`[agillic-save] Staging new campaign via V1: ${campaignName}`);
 
       // Use V1 staging — returns campaignId directly (needed for :test endpoint)
@@ -261,16 +298,37 @@ function buildBlockGroups(
   values: Record<string, string>,
   templateBlockGroups: Array<{ blockGroupId: string; blockId: string; messageTemplate?: string }>,
   templateName: string,
+  campaignName: string,
 ) {
+  // Collect all block group namespaces for heuristic matching
+  const blockGroupNamespaces = templateBlockGroups.map(
+    (bg) => bg.blockGroupId.replace("blockgroup-", "")
+  );
+
   // Group variables by their namespace
   const varsByNamespace = new Map<string, Record<string, string>>();
 
   for (const v of parsedVariables) {
-    // Determine namespace: editable fields → "main", blockparam fields → their namespace
-    const ns = v.type === "editable" ? "main" : (v.namespace || "main");
+    let ns: string;
+    if (v.namespace) {
+      // blockparam variables have explicit namespaces
+      ns = v.namespace;
+    } else {
+      // Editable variables have no namespace — match field name to a block group.
+      // e.g., "Preheader" → matches "preheader" block group namespace
+      const fieldLower = v.fieldName.toLowerCase();
+      const matchedNs = blockGroupNamespaces.find(
+        (bgNs) => bgNs.toLowerCase() === fieldLower
+      );
+      ns = matchedNs || "main";
+    }
     if (!varsByNamespace.has(ns)) varsByNamespace.set(ns, {});
     varsByNamespace.get(ns)![v.fieldName] = values[v.raw] || "";
   }
+
+  console.log(`[agillic-save] Variable namespace mapping:`, Object.fromEntries(
+    [...varsByNamespace.entries()].map(([ns, fields]) => [ns, Object.keys(fields)])
+  ));
 
   // Map to the real template block groups
   // Strategy: match namespace to blockGroupId suffix
@@ -328,7 +386,7 @@ function buildBlockGroups(
         fields,  // Keep for filtering
         messages: [
           {
-            name: `forge-${bgNamespace}`,
+            name: `${campaignName}_${bg.blockId}_1`,
             messageTemplate,
             blockId: bg.blockId,
             variants: [{ name: "MessageVariants_1", fields }],

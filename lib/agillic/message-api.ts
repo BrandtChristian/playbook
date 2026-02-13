@@ -113,7 +113,38 @@ export class MessageAPIClient {
   }
 
   /**
-   * Edit an existing campaign. Async — returns a taskId.
+   * Edit an existing campaign via V1. Synchronous — returns immediately.
+   * Matches Bifrost's proven working implementation.
+   */
+  async editCampaignV1(
+    campaignId: string,
+    payload: Omit<StagePayload, "name" | "templateName" | "blockGroups"> & {
+      blockGroups: EditBlockGroup[];
+    }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Promise<any> {
+    return this.client.request(
+      "/messages/v1/campaign/email/:edit",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          campaignId,
+          ...payload,
+          // Strip blockGroupId from block groups — edit doesn't use them
+          blockGroups: payload.blockGroups.map((bg) => ({
+            messages: bg.messages.map((msg) => ({
+              name: msg.name,
+              variants: msg.variants,
+            })),
+          })),
+        }),
+      }
+    );
+  }
+
+  /**
+   * Edit an existing campaign via V2. Async — returns a taskId.
+   * @deprecated Use editCampaignV1 instead — V1 is synchronous and proven.
    */
   async editCampaign(
     campaignId: string,

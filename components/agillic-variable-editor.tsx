@@ -206,8 +206,8 @@ export function AgillicVariableEditor({
     try {
       // Always save first to ensure campaign is staged with latest content
       await handleSave(true);
-      // Small buffer for Agillic propagation (save already polls for task completion)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait 5s for Agillic propagation (matching Bifrost's proven delay)
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       // Test the staged campaign via Agillic
       const res = await fetch(`/api/agillic/emails/${email.id}/test`, {
         method: "POST",
