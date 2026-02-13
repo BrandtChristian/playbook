@@ -1,6 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-export const anthropic = new Anthropic();
+export const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY ?? "",
+  defaultHeaders: {
+    "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://playbook.app",
+    "X-Title": "Playbook",
+  },
+});
+
+export const AI_MODEL = "anthropic/claude-sonnet-4.5";
 
 // ---------------------------------------------------------------------------
 // Types

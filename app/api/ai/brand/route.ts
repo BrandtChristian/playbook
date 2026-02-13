@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { anthropic, AI_TEMPERATURES, AI_LIMITS, validateBrandConfig, type AiErrorCode } from "@/lib/ai";
+import { openai, AI_MODEL, AI_TEMPERATURES, AI_LIMITS, validateBrandConfig, type AiErrorCode } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const BRAND_SYSTEM_PROMPT = `You are a brand identity designer for email marketing templates.
@@ -83,16 +83,17 @@ Please adjust based on this feedback: ${iteration_prompt}`;
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+    const completion = await openai.chat.completions.create({
+      model: AI_MODEL,
       max_tokens: 512,
       temperature: AI_TEMPERATURES.brand,
-      system: BRAND_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+      messages: [
+        { role: "system", content: BRAND_SYSTEM_PROMPT },
+        { role: "user", content: userMessage },
+      ],
     });
 
-    const text =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    const text = completion.choices[0]?.message?.content ?? "";
 
     // Parse the JSON from the response
     const jsonMatch = text.match(/\{[\s\S]*\}/);

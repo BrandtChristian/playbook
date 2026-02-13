@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  anthropic,
+  openai,
+  AI_MODEL,
   buildSystemPrompt,
   validateGenerateRequest,
   parseSubjectLines,
@@ -227,26 +228,30 @@ Return a "variables" object with a key for each variable.
       const schema = buildAgillicFillSchema(agillicVariables);
       console.log("[AI Generate] Agillic fill, variables:", fillableVars.length);
 
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250929",
+      const completion = await openai.chat.completions.create({
+        model: AI_MODEL,
         max_tokens: 2048,
         temperature: AI_TEMPERATURES["fill-agillic"],
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        output_config: {
-          format: {
-            type: "json_schema",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "agillic_fill",
+            strict: true,
             schema,
           },
         },
       });
 
-      const content = message.content[0];
-      if (content.type !== "text") {
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
         return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
       }
 
-      const parsed = JSON.parse(content.text);
+      const parsed = JSON.parse(text);
       const variables = parsed.variables || parsed;
 
       return NextResponse.json({ result: JSON.stringify(variables), type });
@@ -273,20 +278,22 @@ Return ONLY the improved content:
 - No explanation, no markdown fences.`;
 
     try {
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250929",
+      const completion = await openai.chat.completions.create({
+        model: AI_MODEL,
         max_tokens: 1024,
         temperature: AI_TEMPERATURES["improve-agillic-field"],
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
       });
 
-      const content = message.content[0];
-      if (content.type !== "text") {
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
         return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
       }
 
-      return NextResponse.json({ result: content.text, type });
+      return NextResponse.json({ result: text, type });
     } catch (error) {
       console.error("AI generation error (agillic improve):", error);
       return jsonError("AI generation failed. Please try again.", "AI_SERVICE_ERROR", 500);
@@ -316,27 +323,31 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
       const schema = buildBlockFillSchema(structure);
       console.log("[AI Generate] Structure-aware fill, schema:", JSON.stringify(schema).slice(0, 300));
 
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250929",
+      const completion = await openai.chat.completions.create({
+        model: AI_MODEL,
         max_tokens: 1024,
         temperature: AI_TEMPERATURES.body,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        output_config: {
-          format: {
-            type: "json_schema",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "block_fill",
+            strict: true,
             schema,
           },
         },
       });
 
-      const content = message.content[0];
-      if (content.type !== "text") {
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
         return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
       }
 
-      console.log("[AI Generate] Structured output:", content.text.slice(0, 300));
-      const parsed = JSON.parse(content.text);
+      console.log("[AI Generate] Structured output:", text.slice(0, 300));
+      const parsed = JSON.parse(text);
       const blocksArray: unknown[] = parsed.blocks || parsed;
 
       // Pad/truncate to match structure length
@@ -382,28 +393,30 @@ Use Liquid variables ({{ first_name }}, {{ company }}) where natural.`;
   try {
     console.log("[AI Generate] Type:", type, "Prompt:", prompt.slice(0, 100));
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+    const completion = await openai.chat.completions.create({
+      model: AI_MODEL,
       max_tokens: 1024,
       temperature: AI_TEMPERATURES[type] ?? 1.0,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
+    const text = completion.choices[0]?.message?.content;
+    if (!text) {
       return jsonError("Unexpected AI response format", "AI_SERVICE_ERROR", 500);
     }
 
-    console.log("[AI Generate] Result:", content.text.slice(0, 200));
+    console.log("[AI Generate] Result:", text.slice(0, 200));
 
     // For subject lines, also return a parsed array
     if (type === "subject") {
-      const subjects = parseSubjectLines(content.text);
-      return NextResponse.json({ result: content.text, subjects, type });
+      const subjects = parseSubjectLines(text);
+      return NextResponse.json({ result: text, subjects, type });
     }
 
-    return NextResponse.json({ result: content.text, type });
+    return NextResponse.json({ result: text, type });
   } catch (error) {
     console.error("AI generation error:", error);
     const msg = error instanceof Error && error.message?.includes("rate")

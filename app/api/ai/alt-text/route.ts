@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { anthropic, AI_TEMPERATURES, type AiErrorCode } from "@/lib/ai";
+import { openai, AI_MODEL, AI_TEMPERATURES, type AiErrorCode } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+    const completion = await openai.chat.completions.create({
+      model: AI_MODEL,
       max_tokens: 128,
       temperature: AI_TEMPERATURES["alt-text"],
       messages: [
@@ -73,8 +73,8 @@ export async function POST(request: Request) {
           role: "user",
           content: [
             {
-              type: "image",
-              source: { type: "url", url: imageUrl },
+              type: "image_url",
+              image_url: { url: imageUrl },
             },
             {
               type: "text",
@@ -85,15 +85,15 @@ export async function POST(request: Request) {
       ],
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
+    const text = completion.choices[0]?.message?.content;
+    if (!text) {
       return NextResponse.json(
         { error: "Unexpected response", code: "AI_SERVICE_ERROR" as AiErrorCode },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ alt: content.text.trim() });
+    return NextResponse.json({ alt: text.trim() });
   } catch (error) {
     console.error("Alt text generation error:", error);
     return NextResponse.json(

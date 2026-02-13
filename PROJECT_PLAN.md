@@ -373,7 +373,7 @@ supabase/
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
 NEXT_PUBLIC_SIGNUP_CODE=                # required: invite code for signup (no code = signup blocked)
 NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS=     # optional: comma-separated domain allowlist
 NEXT_PUBLIC_APP_URL=                    # optional: app URL for email links
