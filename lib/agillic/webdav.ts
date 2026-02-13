@@ -201,3 +201,47 @@ export function extractVariables(htmlContent: string): ParsedVariable[] {
     .sort((a, b) => a.position - b.position)
     .map((r) => r.variable);
 }
+
+/**
+ * Block group structure extracted from the template HTML.
+ * Used to construct the correct Message API payload.
+ */
+export interface TemplateBlockGroup {
+  blockGroupId: string;  // e.g. "blockgroup-preheader"
+  blockId: string;       // e.g. "block-preheader"
+  messageTemplate?: string;  // e.g. "forge-preheader" - optional, can be derived from blockGroupId
+}
+
+/**
+ * Extract block group and block IDs from Agillic template HTML.
+ * These are defined by agblockgroup="true" agid="..." and agblock elements.
+ */
+export function extractBlockGroups(htmlContent: string): TemplateBlockGroup[] {
+  const blockGroupIds: string[] = [];
+  const blockIds: string[] = [];
+
+  // Find blockgroup IDs: agblockgroup="true" ... agid="blockgroup-preheader"
+  const bgMatches = [
+    ...htmlContent.matchAll(/agblockgroup=["']true["'][^>]*agid=["']([^"']+)["']/g),
+  ];
+  for (const m of bgMatches) {
+    blockGroupIds.push(m[1]);
+  }
+
+  // Find block IDs: agid="block-..." (block IDs start with "block-")
+  const blockMatches = [
+    ...htmlContent.matchAll(/agid=["'](block-[^"']+)["']/g),
+  ];
+  for (const m of blockMatches) {
+    // Exclude blockgroup IDs (they also start with "block" via "blockgroup-")
+    if (!m[1].startsWith("blockgroup-")) {
+      blockIds.push(m[1]);
+    }
+  }
+
+  // Pair them up (they appear in order in the HTML)
+  return blockGroupIds.map((bgId, i) => ({
+    blockGroupId: bgId,
+    blockId: blockIds[i] || bgId.replace("blockgroup-", "block-"),
+  }));
+}

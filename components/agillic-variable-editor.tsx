@@ -28,6 +28,7 @@ type AgillicVariableEditorProps = {
     agillic_template_name: string;
     agillic_variables: Record<string, string> | null;
     agillic_campaign_id: string | null;
+    agillic_target_group_name: string | null;
   };
   templateHtml: string;
   variables: ParsedVariable[];
@@ -109,12 +110,22 @@ export function AgillicVariableEditor({
   const [values, setValues] = useState<Record<string, string>>(
     email.agillic_variables ?? {}
   );
+  const [targetGroupName, setTargetGroupName] = useState(email.agillic_target_group_name || "");
+  const [targetGroups, setTargetGroups] = useState<Array<{ name: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [dirty, setDirty] = useState(false);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch target groups
+  useEffect(() => {
+    fetch("/api/agillic/target-groups")
+      .then((r) => r.json())
+      .then((json) => setTargetGroups(json.targetGroups ?? []))
+      .catch(() => {});
+  }, []);
 
   // Initialize default values from template
   useEffect(() => {
@@ -165,6 +176,7 @@ export function AgillicVariableEditor({
         body: JSON.stringify({
           subject,
           variables: values,
+          targetGroupName,
         }),
       });
 
@@ -260,6 +272,33 @@ export function AgillicVariableEditor({
               }}
               placeholder="Email subject"
             />
+          </div>
+
+          {/* Target Group (required for staging) */}
+          <div className="grid gap-2">
+            <Label className="font-medium">
+              Target Group <span className="text-xs text-muted-foreground">(for staging)</span>
+            </Label>
+            <select
+              value={targetGroupName}
+              onChange={(e) => {
+                setTargetGroupName(e.target.value);
+                setDirty(true);
+              }}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Select target group...</option>
+              {targetGroups.map((tg) => (
+                <option key={tg.name} value={tg.name}>
+                  {tg.name}
+                </option>
+              ))}
+            </select>
+            {!targetGroupName && (
+              <p className="text-xs text-muted-foreground">
+                Required for staging campaigns in Agillic (not needed for test sends)
+              </p>
+            )}
           </div>
 
           {/* Variables */}

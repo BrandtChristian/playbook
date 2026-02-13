@@ -39,3 +39,12 @@
 - **Proxy not middleware**: The file is `proxy.ts` with export `proxy`, NOT `middleware.ts` with export `middleware`. Easy to forget.
 - **Server client is async**: `createClient()` from `lib/supabase/server.ts` must be awaited. Forgetting `await` causes cryptic errors.
 - **React cache()**: `getCurrentUser()` is wrapped in `cache()` — it deduplicates within a single request. Safe to call multiple times in server components without extra DB hits.
+## Agillic Integration
+
+- **Message Templates are separate from HTML templates**: The `messageTemplate` field in the Message API refers to a "Message Template" (also called "promotion template") that must be configured separately in Agillic. It defines the available fields for a block group. This is NOT extracted from the HTML template.
+- **Message template naming convention discovery**: Extract the organization prefix from the HTML template filename (e.g., `bifrost-AJ-Produkter.html` → `bifrost`) and construct message template names like `bifrost-danskindustri-main-hero`. Use a suffix mapping for common block groups: `main` → `main-hero`, `header` → `header-logo`, etc.
+- **Empty fields not allowed**: The Agillic Message API v1 rejects block groups where `variants[].fields` is an empty object. Always filter out block groups that have no populated variables before staging. Check `Object.keys(fields).length > 0` before including a block group.
+- **Block group ID mismatch**: The error "Found agblockgroup that does not match any group in the template" typically means the message template name doesn't exist in Agillic, not an issue with block group IDs from HTML.
+- **Target groups required for staging**: Campaigns cannot be staged without a valid target group. Target groups must be synced from Agillic production instance first. Store the selected target group with each email (`agillic_target_group_name` column) so it can be reused when editing.
+- **Test sends don't require target groups**: The `:test` endpoint works with just a campaign ID and recipient email. No target group validation needed for testing.
+- **Campaign editing uses different payload**: When updating an existing campaign (has `agillic_campaign_id`), strip `messageTemplate` and `blockId` from the block groups payload - these are stage-only fields.

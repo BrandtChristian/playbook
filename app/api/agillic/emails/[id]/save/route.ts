@@ -52,8 +52,8 @@ export async function POST(
     from_email: string | null;
   };
 
-  const { subject, variables } = await request.json();
-  console.log(`[agillic-save] Subject: "${subject}", variables: ${Object.keys(variables || {}).length} keys`);
+  const { subject, variables, targetGroupName } = await request.json();
+  console.log(`[agillic-save] Subject: "${subject}", variables: ${Object.keys(variables || {}).length} keys, target group: ${targetGroupName || "none"}`);
 
   // Step 1: Always save locally (this should never fail)
   const { error: updateError } = await supabase
@@ -61,6 +61,7 @@ export async function POST(
     .update({
       subject,
       agillic_variables: variables,
+      agillic_target_group_name: targetGroupName || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", emailId);
@@ -82,10 +83,32 @@ export async function POST(
     });
   }
 
+  // Use the selected target group or fall back to fetching one
+  let targetGroupNameToUse = targetGroupName;
+  if (!targetGroupNameToUse) {
+    const { data: targetGroups } = await supabase
+      .from("agillic_target_groups")
+      .select("name")
+      .eq("org_id", profile.org_id)
+      .limit(1);
+    
+    targetGroupNameToUse = targetGroups?.[0]?.name;
+    if (!targetGroupNameToUse) {
+      console.warn(`[agillic-save] No target group selected or available`);
+      return NextResponse.json({
+        success: true,
+        staged: false,
+        message: "Saved locally. Select a target group to stage in Agillic.",
+      });
+    }
+  }
+  
+  console.log(`[agillic-save] Using target group: ${targetGroupNameToUse}`);
+
   // Fetch template metadata
   const { data: template, error: tplError } = await supabase
     .from("agillic_template_cache")
-    .select("template_name, detected_variables")
+    .select("template_name, detected_variables, block_groups")
     .eq("org_id", profile.org_id)
     .eq("template_name", email.agillic_template_name)
     .single();
@@ -106,17 +129,28 @@ export async function POST(
     const messaging = new MessageAPIClient(client);
 
     const existingCampaignId = email.agillic_campaign_id;
+    const templateBlockGroups = (template.block_groups ?? []) as Array<{ blockGroupId: string; blockId: string; messageTemplate?: string }>;
     const blockGroups = buildBlockGroups(
       template.detected_variables as Array<{ type: string; fieldName: string; namespace?: string; raw: string }>,
-      variables || {}
-    );
+      variables || {},
+      templateBlockGroups,      email.agillic_template_name || '',    );
 
-    console.log(`[agillic-save] Block groups built: ${blockGroups.length} groups`);
+    console.log(`[agillic-save] Block groups built: ${blockGroups.length} groups (filtered from ${templateBlockGroups.filter(bg => !bg.blockGroupId.includes("footer")).length} non-footer groups)`);
     console.log(`[agillic-save] Existing campaign ID: ${existingCampaignId || "none (first save)"}`);
+
+    // Validate: must have at least one block group with fields
+    if (blockGroups.length === 0) {
+      console.warn(`[agillic-save] No block groups with fields — cannot stage to Agillic`);
+      return NextResponse.json({
+        success: true,
+        staged: false,
+        message: "Saved locally. No content to stage — please populate template variables.",
+      });
+    }
 
     if (existingCampaignId) {
       console.log(`[agillic-save] Editing existing campaign: ${existingCampaignId}`);
-      // Edit format: strip messageTemplate and blockId from messages (stage-only fields)
+      // Edit format: ste and blockId from messages (stage-only fields)
       const editBlockGroups = blockGroups.map((bg) => ({
         messages: bg.messages.map((msg) => ({
           name: msg.name,
@@ -126,7 +160,7 @@ export async function POST(
       console.log(`[agillic-save] Edit payload:`, JSON.stringify({ campaignId: existingCampaignId, subject, blockGroups: editBlockGroups }).slice(0, 500));
       await messaging.editCampaign(existingCampaignId, {
         subject,
-        targetGroupName: "All Recipients",
+        targetGroupName: targetGroupNameToUse,
         utmCampaign: email.name,
         blockGroups: editBlockGroups as import("@/lib/agillic/message-api").EditBlockGroup[],
       });
@@ -136,16 +170,21 @@ export async function POST(
       console.log(`[agillic-save] Staging new campaign via V1: ${campaignName}`);
 
       // Use V1 staging — returns campaignId directly (needed for :test endpoint)
-      const result = await messaging.stageCampaignV1({
+      const stagePayload: import("@/lib/agillic/message-api").StagePayload = {
         name: campaignName,
         subject,
         templateName: template.template_name,
-        targetGroupName: "All Recipients",
-        senderName: org.from_name || undefined,
-        senderEmail: org.from_email || undefined,
+        targetGroupName: targetGroupNameToUse,
         utmCampaign: campaignName,
         blockGroups,
-      });
+      };
+      // Sender fields: only include if this is a valid Agillic sender domain.
+      // The org's from_email may be a Resend domain — never send that to Agillic.
+      // For now, let Agillic use its configured default sender.
+      // TODO: Add agillic_sender_email field to org settings for explicit Agillic sender config.
+
+      console.log(`[agillic-save] Stage payload keys:`, Object.keys(stagePayload));
+      const result = await messaging.stageCampaignV1(stagePayload);
 
       console.log(`[agillic-save] V1 stage result: campaignId=${result.campaignId}`);
 
@@ -179,35 +218,107 @@ export async function POST(
 }
 
 /**
- * Build Agillic Message API block groups from parsed variables and values.
+ * Build Agillic Message API block groups using the REAL template structure.
+ *
+ * Maps variables to their block groups based on namespace:
+ * - "main" namespace → blockgroup-main
+ * - "header" namespace → blockgroup-header
+ * - "hero" namespace → blockgroup-main (hero is usually inside main)
+ * - editables without namespace → blockgroup-main
+ *
+ * Uses actual blockGroupId and blockId from the template HTML.
+ * Filters out block groups with no fields (Agillic requirement: fields cannot be empty).
  */
 function buildBlockGroups(
   parsedVariables: Array<{ type: string; fieldName: string; namespace?: string; raw: string }>,
-  values: Record<string, string>
+  values: Record<string, string>,
+  templateBlockGroups: Array<{ blockGroupId: string; blockId: string; messageTemplate?: string }>,
+  templateName: string,
 ) {
-  const groups = new Map<string, Record<string, string>>();
+  // Group variables by their namespace
+  const varsByNamespace = new Map<string, Record<string, string>>();
 
   for (const v of parsedVariables) {
-    if (v.type === "editable") {
-      const ns = "main";
-      if (!groups.has(ns)) groups.set(ns, {});
-      groups.get(ns)![v.fieldName] = values[v.raw] || "";
-    } else if (v.type === "blockparam" && v.namespace) {
-      const ns = v.namespace;
-      if (!groups.has(ns)) groups.set(ns, {});
-      groups.get(ns)![v.fieldName] = values[v.raw] || "";
-    }
+    // Determine namespace: editable fields → "main", blockparam fields → their namespace
+    const ns = v.type === "editable" ? "main" : (v.namespace || "main");
+    if (!varsByNamespace.has(ns)) varsByNamespace.set(ns, {});
+    varsByNamespace.get(ns)![v.fieldName] = values[v.raw] || "";
   }
 
-  return Array.from(groups.entries()).map(([namespace, fields]) => ({
-    blockGroupId: `blockgroup-${namespace}`,
-    messages: [
-      {
-        name: `forge-${namespace}`,
-        messageTemplate: `forge-${namespace}`,
-        blockId: `block-${namespace}`,
-        variants: [{ name: "MessageVariants_1", fields }],
-      },
-    ],
-  }));
+  // Map to the real template block groups
+  // Strategy: match namespace to blockGroupId suffix
+  // e.g., namespace "main" matches "blockgroup-main", namespace "header" matches "blockgroup-header"
+  const blockGroups = templateBlockGroups
+    .filter((bg) => {
+      // Skip footer block group (not user-editable)
+      return !bg.blockGroupId.includes("footer");
+    })
+    .map((bg) => {
+      // Extract the namespace from blockGroupId: "blockgroup-main" → "main"
+      const bgNamespace = bg.blockGroupId.replace("blockgroup-", "");
+
+      // Collect all variable fields that belong to this block group
+      // Check: direct namespace match, or variables whose namespace maps to this block group
+      let fields: Record<string, string> = {};
+
+      // Direct match
+      if (varsByNamespace.has(bgNamespace)) {
+        fields = { ...fields, ...varsByNamespace.get(bgNamespace) };
+      }
+
+      // Also check for sub-namespaces: e.g., "hero" variables go into "main" block group
+      // This handles cases where the blockGroupId is "blockgroup-main" but variables have namespace "hero"
+      for (const [ns, nsFields] of varsByNamespace) {
+        // If this namespace doesn't have its own block group, assign to main
+        const hasOwnGroup = templateBlockGroups.some(
+          (tbg) => tbg.blockGroupId === `blockgroup-${ns}`
+        );
+        if (!hasOwnGroup && bgNamespace === "main") {
+          fields = { ...fields, ...nsFields };
+        }
+      }
+
+      // Derive message template name from the HTML template name
+      // Convention: bifrost-AJ-Produkter.html → uses bifrost-danskindustri-* message templates
+      // Extract the prefix from the template filename
+      const templatePrefix = templateName?.split('-')[0] || 'forge';
+      const templateOrg = templatePrefix === 'bifrost' ? 'bifrost-danskindustri' : templatePrefix;
+      
+      // Map namespace to message template suffix
+      const suffixMap: Record<string, string> = {
+        'preheader': 'preheader',
+        'header': 'header-logo',
+        'main': 'main-hero',
+        'hero': 'hero',
+        'footer': 'footer',
+      };
+      const suffix = suffixMap[bgNamespace] || bgNamespace;
+      
+      const messageTemplate = bg.messageTemplate || `${templateOrg}-${suffix}`;
+
+      return {
+        blockGroupId: bg.blockGroupId,
+        fields,  // Keep for filtering
+        messages: [
+          {
+            name: `forge-${bgNamespace}`,
+            messageTemplate,
+            blockId: bg.blockId,
+            variants: [{ name: "MessageVariants_1", fields }],
+          },
+        ],
+      };
+    })
+    .filter((bg) => {
+      // CRITICAL: Filter out block groups with no fields
+      // Agillic API requires: fields cannot be empty
+      const hasFields = Object.keys(bg.fields).length > 0;
+      if (!hasFields) {
+        console.log(`[agillic-save] Skipping block group ${bg.blockGroupId}: no fields`);
+      }
+      return hasFields;
+    })
+    .map(({ fields: _, ...bg }) => bg);  // Remove the temporary fields property
+
+  return blockGroups;
 }

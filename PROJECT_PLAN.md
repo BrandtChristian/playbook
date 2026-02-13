@@ -109,6 +109,13 @@ A marketing automation platform that uses Resend as sending infrastructure (unde
 
 ## Day 6: Flow Designer + Template/Email Separation — DONE
 
+**Agillic Integration Fixes** (Post-Day 6):
+- Fixed test send functionality by resolving message template and target group issues
+- Implemented dynamic message template name derivation from HTML template filename
+- Added block group filtering to exclude groups with empty fields (Agillic API requirement)
+- Added target group selector UI in email editor with database persistence
+- Fixed empty field validation to prevent staging campaigns with no content
+
 - [x] **Signup lockdown**: Invite code required to sign up (`NEXT_PUBLIC_SIGNUP_CODE` env var). No code = signup blocked.
 - [x] **Flow Designer**: Visual journey builder at `/flows`. Vertical timeline with node cards, connector lines, "+" insert buttons. 4 node types: Trigger (segment entry or schedule), Send Email, Wait/Delay, Exit.
 - [x] **Flow trigger types**: Segment entry (contacts entering a segment start the flow) or Schedule (once/hourly/daily/weekly/monthly runs against a segment). Re-entry with optional cooldown delay.

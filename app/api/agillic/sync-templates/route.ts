@@ -4,6 +4,7 @@ import {
   listWebDAVTemplates,
   fetchWebDAVTemplate,
   extractVariables,
+  extractBlockGroups,
 } from "@/lib/agillic/webdav";
 
 /**
@@ -78,6 +79,7 @@ export async function POST() {
         );
 
         const variables = extractVariables(html);
+        const blockGroups = extractBlockGroups(html);
 
         await supabase.from("agillic_template_cache").upsert(
           {
@@ -85,6 +87,7 @@ export async function POST() {
             template_name: file.name,
             html_content: html,
             detected_variables: variables,
+            block_groups: blockGroups,
             webdav_last_modified: file.lastModified || null,
             synced_at: now,
             is_active: true,

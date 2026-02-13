@@ -34,6 +34,7 @@ type Email = {
   agillic_template_name?: string | null;
   agillic_variables?: Record<string, string> | null;
   agillic_campaign_id?: string | null;
+  agillic_target_group_name?: string | null;
 };
 
 type AgillicTemplate = {
@@ -210,6 +211,7 @@ export function EmailsClient({
             agillic_template_name: editingEmail.agillic_template_name,
             agillic_variables: editingEmail.agillic_variables ?? null,
             agillic_campaign_id: editingEmail.agillic_campaign_id ?? null,
+            agillic_target_group_name: editingEmail.agillic_target_group_name ?? null,
           }}
           templateHtml={agillicTemplateHtml}
           variables={agTpl.detected_variables ?? []}
