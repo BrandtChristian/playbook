@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.error, "VALIDATION_ERROR", 400);
   }
 
-  const { type, prompt, context, currentContent, structure, blockType, templateName, emailPurpose, agillicVariables, agillicFieldName, agillicFieldDataType } = body;
+  const { type, prompt, context, currentContent, structure, blockType, templateName, emailPurpose, agillicVariables, agillicFieldName, agillicFieldDataType, agillicFieldType } = body;
 
   // Fetch org context for richer AI prompts
   let orgContext: OrgContext | undefined;
@@ -216,8 +216,8 @@ The email template has these variable slots to fill:
 ${varList}
 
 Return a "variables" object with a key for each variable.
-- For Rich text fields: write engaging HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no <html>/<body>/<head>
-- For Text fields: write plain text
+- For Rich text (HTML) fields: write engaging HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no <html>/<body>/<head>. These are editable sections in the template that accept formatted HTML.
+- For Text fields: write PLAIN TEXT ONLY — absolutely NO HTML tags like <p>, <br>, <strong>, <em>, etc. Just the raw text content. The template already provides all styling.
 - For URL fields: write a plausible URL like "https://example.com/..."
 - For IMAGE fields: return null
 - Use Agillic personalization where natural: <persondata>FIRSTNAME</persondata>, <persondata>LASTNAME</persondata>, etc.
@@ -261,9 +261,11 @@ Return a "variables" object with a key for each variable.
     }
   }
 
-  // Agillic field improve: plain text response for a single field
+  // Agillic field improve: plain text or HTML depending on field type
   if (type === "improve-agillic-field") {
-    const fieldType = agillicFieldDataType === "LINK" ? "URL" : agillicFieldDataType === "IMAGE" ? "image URL" : "text/HTML";
+    // editable fields → HTML, blockparam STRING fields → plain text
+    const isEditable = agillicFieldType === "editable";
+    const fieldType = agillicFieldDataType === "LINK" ? "URL" : agillicFieldDataType === "IMAGE" ? "image URL" : isEditable ? "rich text (HTML)" : "plain text";
     const userMessage = `Improve this ${fieldType} content for an email field called "${agillicFieldName || "field"}".
 
 Current content:
@@ -272,7 +274,8 @@ ${currentContent}
 Instructions: ${prompt}${contextSuffix}
 
 Return ONLY the improved content:
-- For text/HTML fields: return HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no markdown, no <html>/<body>/<head>
+- For rich text (HTML) fields: return HTML content (<p>, <strong>, <em>, <a>, <ul>, <li>) — no markdown, no <html>/<body>/<head>
+- For plain text fields: return PLAIN TEXT ONLY — no HTML tags whatsoever, no <p>, no <br>, no <strong>. Just raw text. The template already provides styling.
 - For URL fields: return only the URL
 - Preserve any <persondata>FIELDNAME</persondata> tags
 - No explanation, no markdown fences.`;

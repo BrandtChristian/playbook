@@ -102,7 +102,8 @@ export function AiAgillicPromptBar({
             templateName,
             currentContent: currentFieldValue ?? "",
             agillicFieldName: selectedVariable.fieldName,
-            agillicFieldDataType: selectedVariable.dataType ?? (selectedVariable.type === "editable" ? "STRING" : "STRING"),
+            agillicFieldDataType: selectedVariable.dataType ?? "STRING",
+            agillicFieldType: selectedVariable.type,
           };
           break;
         }

@@ -57,6 +57,7 @@ export type GenerateRequest = {
   agillicVariables?: AgillicVariableSlot[];
   agillicFieldName?: string;
   agillicFieldDataType?: string;
+  agillicFieldType?: "editable" | "blockparam";
 };
 
 // ---------------------------------------------------------------------------
@@ -131,13 +132,15 @@ export function buildSystemPrompt(orgContext?: OrgContext): string {
 Rules:
 - Use Agillic personalization tags for recipient data: ${agillicVars}
 - The format is <persondata>FIELDNAME</persondata> where FIELDNAME is uppercase
-- Write in HTML format suitable for email (use <h1>, <h2>, <p>, <ul>, <li>, <a>, <strong>, <em>)
+- Agillic templates have pre-styled blocks. You fill content into variable slots:
+  - "Rich text (editable)" fields: use HTML (<p>, <strong>, <em>, <a>, <ul>, <li>) for formatting. No <html>/<head>/<body>.
+  - "Text" fields (blockparam STRING): write PLAIN TEXT only — no HTML tags, no <p>, no <br>. Just the raw text content.
+  - "URL" fields: return a valid URL only.
 - Keep emails concise — aim for 100-200 words for the body
 - Use a warm, conversational tone unless told otherwise
 - Include a clear call-to-action where appropriate
-- Do NOT include <html>, <head>, <body> tags — only the inner content
 - Do NOT include subject lines in the body — those are separate
-- Do NOT use markdown — use HTML tags only`);
+- Do NOT use markdown`);
   } else {
     const allVars = STANDARD_LIQUID_VARS.map((v) => `{{ ${v} }}`).join(", ");
     const customVars = (orgContext?.customFieldNames ?? [])

@@ -18,6 +18,9 @@ import {
   TextAa,
   TextT,
   Sparkle,
+  UploadSimple,
+  Images,
+  Warning,
 } from "@phosphor-icons/react";
 import type { ParsedVariable } from "@/lib/agillic/webdav";
 import { AiAgillicPromptBar } from "@/components/email-builder/ai-agillic-prompt-bar";
@@ -99,6 +102,287 @@ function renderPreview(
   }
 
   return result;
+}
+
+type AssetImage = { name: string; url: string; created_at: string };
+
+/**
+ * Image picker for Agillic IMAGE fields — upload, asset library, preview, alt-text.
+ * Does NOT expose width/alignment controls (Agillic templates own layout).
+ */
+function AgillicImageField({
+  value,
+  onChange,
+  altVariable,
+  altValue,
+  onAltChange,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  /** If a sibling alt-text variable was detected in the same namespace */
+  altVariable: ParsedVariable | null;
+  altValue: string;
+  onAltChange: (alt: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [assets, setAssets] = useState<AssetImage[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [generatingAlt, setGeneratingAlt] = useState(false);
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const json = await res.json();
+      if (res.ok) {
+        onChange(json.url);
+        toast.success("Image uploaded");
+        // Auto-generate alt text if we have an alt field
+        if (altVariable) {
+          fetch("/api/ai/alt-text", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: json.url }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.alt) onAltChange(data.alt);
+            })
+            .catch(() => {});
+        }
+      } else {
+        toast.error(json.error || "Upload failed");
+      }
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function loadAssets() {
+    setShowLibrary(true);
+    if (assets.length > 0) return;
+    setLoadingAssets(true);
+    try {
+      const res = await fetch("/api/images");
+      const json = await res.json();
+      if (res.ok) setAssets(json.images || []);
+    } catch {
+      // silent
+    } finally {
+      setLoadingAssets(false);
+    }
+  }
+
+  async function generateAlt() {
+    if (!value) return;
+    setGeneratingAlt(true);
+    try {
+      const res = await fetch("/api/ai/alt-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: value }),
+      });
+      const json = await res.json();
+      if (res.ok && json.alt) {
+        onAltChange(json.alt);
+        toast.success("Alt text generated");
+      }
+    } catch {
+      // silent
+    } finally {
+      setGeneratingAlt(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) uploadFile(f);
+          e.target.value = "";
+        }}
+      />
+
+      {value ? (
+        /* Preview + change */
+        <div className="relative bg-stone-100 dark:bg-stone-800 p-3 rounded-md">
+          <img
+            src={value}
+            alt={altValue || ""}
+            className="max-h-[120px] max-w-full object-contain mx-auto block"
+          />
+          <div className="absolute top-1.5 right-1.5 flex gap-1">
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[10px] px-1.5 py-0.5 bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-600 rounded"
+            >
+              Change
+            </button>
+          </div>
+        </div>
+      ) : showLibrary ? (
+        /* Asset library browser */
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Asset Library</span>
+            <button
+              type="button"
+              className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
+              onClick={() => setShowLibrary(false)}
+            >
+              Back to upload
+            </button>
+          </div>
+          {loadingAssets ? (
+            <div className="flex items-center justify-center py-6">
+              <CircleNotch className="h-5 w-5 animate-spin text-stone-400 dark:text-stone-500" />
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="text-center py-4 text-xs text-stone-400 dark:text-stone-500">
+              No images uploaded yet
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto">
+              {assets.map((a) => (
+                <button
+                  key={a.name}
+                  type="button"
+                  onClick={() => {
+                    onChange(a.url);
+                    setShowLibrary(false);
+                  }}
+                  className="aspect-square overflow-hidden border border-stone-200 dark:border-stone-700 hover:border-indigo-400 hover:ring-1 hover:ring-indigo-400 transition-all rounded"
+                >
+                  <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Upload zone */
+        <div
+          className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 py-6 cursor-pointer hover:border-stone-400 transition-colors rounded-md"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f?.type.startsWith("image/")) uploadFile(f);
+          }}
+        >
+          {uploading ? (
+            <>
+              <CircleNotch className="h-6 w-6 animate-spin text-stone-400" />
+              <span className="text-xs text-stone-400 dark:text-stone-500">Uploading...</span>
+            </>
+          ) : (
+            <>
+              <UploadSimple className="h-6 w-6 text-stone-400 dark:text-stone-500" />
+              <span className="text-xs text-stone-500 dark:text-stone-400">
+                Drop image or click to upload
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  loadAssets();
+                }}
+                className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+              >
+                <Images className="h-3 w-3" />
+                Browse library
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* URL fallback input */}
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="https://cdn.example.com/image.jpg"
+        type="url"
+        className="text-xs"
+      />
+
+      {/* Alt text section */}
+      {altVariable ? (
+        <div className="space-y-1">
+          <Label className="text-xs flex items-center gap-1.5">
+            Alt Text
+            {value && !altValue?.trim() && (
+              <span className="text-amber-500 text-[10px]">(recommended)</span>
+            )}
+          </Label>
+          <div className="flex gap-1.5">
+            <Input
+              value={altValue}
+              onChange={(e) => onAltChange(e.target.value)}
+              placeholder="Describe the image..."
+              className={`text-xs flex-1 ${value && !altValue?.trim() ? "border-amber-400 focus:border-amber-500" : ""}`}
+            />
+            {value && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateAlt}
+                disabled={generatingAlt}
+                className="shrink-0 h-8 px-2"
+              >
+                {generatingAlt ? (
+                  <CircleNotch className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Lightning className="h-3 w-3" weight="fill" />
+                )}
+                <span className="ml-1 text-xs">AI</span>
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : value ? (
+        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+          <Warning className="h-3 w-3 shrink-0" />
+          <span className="text-[10px]">No alt-text field in template</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Find the best alt-text variable for an IMAGE field.
+ * Looks for a sibling blockparam STRING in the same namespace whose fieldName contains "alt".
+ */
+function findAltVariable(
+  imageVar: ParsedVariable,
+  allVariables: ParsedVariable[]
+): ParsedVariable | null {
+  if (!imageVar.namespace) return null;
+  return (
+    allVariables.find(
+      (v) =>
+        v !== imageVar &&
+        v.type === "blockparam" &&
+        v.namespace === imageVar.namespace &&
+        v.dataType !== "IMAGE" &&
+        v.dataType !== "LINK" &&
+        v.fieldName.toLowerCase().includes("alt")
+    ) ?? null
+  );
 }
 
 export function AgillicVariableEditor({
@@ -382,11 +666,18 @@ export function AgillicVariableEditor({
                     className="min-h-[80px] text-sm"
                   />
                 ) : v.dataType === "IMAGE" ? (
-                  <Input
+                  <AgillicImageField
                     value={values[v.raw] ?? v.defaultValue ?? ""}
-                    onChange={(e) => updateValue(v.raw, e.target.value)}
-                    placeholder="https://cdn.example.com/image.jpg"
-                    type="url"
+                    onChange={(url) => updateValue(v.raw, url)}
+                    altVariable={findAltVariable(v, variables)}
+                    altValue={(() => {
+                      const altVar = findAltVariable(v, variables);
+                      return altVar ? (values[altVar.raw] ?? altVar.defaultValue ?? "") : "";
+                    })()}
+                    onAltChange={(alt) => {
+                      const altVar = findAltVariable(v, variables);
+                      if (altVar) updateValue(altVar.raw, alt);
+                    }}
                   />
                 ) : v.dataType === "LINK" ? (
                   <Input
