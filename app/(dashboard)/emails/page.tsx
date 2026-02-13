@@ -26,6 +26,7 @@ export default async function EmailsPage() {
       templates={templates ?? []}
       orgId={orgId}
       fromName={user.organizations.from_name ?? user.organizations.name}
+      emailProvider={user.organizations.email_provider}
     />
   );
 }

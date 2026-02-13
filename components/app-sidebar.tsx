@@ -35,7 +35,7 @@ const allNavItems = [
   { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt, resendOnly: false },
   { title: "Emails", href: "/emails", icon: Envelope, resendOnly: false },
   { title: "Templates", href: "/templates", icon: Layout, resendOnly: false },
-  { title: "Contacts", href: "/contacts", icon: Users, resendOnly: false },
+  { title: "Contacts", href: "/contacts", icon: Users, resendOnly: true },
   { title: "Segments", href: "/segments", icon: ListDashes, resendOnly: true },
   { title: "Data", href: "/data", icon: Database, resendOnly: true },
 ];

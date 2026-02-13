@@ -118,6 +118,16 @@ export function SettingsForm({
   const [agillicConnected, setAgillicConnected] = useState(!!org.agillic_credentials?.staging_key);
   const [savingAgillic, setSavingAgillic] = useState(false);
   const [syncingTargetGroups, setSyncingTargetGroups] = useState(false);
+  const [agillicWebdavUser, setAgillicWebdavUser] = useState(
+    (org.agillic_credentials as Record<string, string> | null)?.webdav_username ?? ""
+  );
+  const [agillicWebdavPass, setAgillicWebdavPass] = useState(
+    (org.agillic_credentials as Record<string, string> | null)?.webdav_password ?? ""
+  );
+  const [agillicWebdavPath, setAgillicWebdavPath] = useState(
+    (org.agillic_credentials as Record<string, string> | null)?.webdav_path ?? "/bcmportlet/webdav/bcm/media/templates/email/Bifrost/"
+  );
+  const [syncingTemplates, setSyncingTemplates] = useState(false);
 
   // Consent types state
   const [consentTypes, setConsentTypes] = useState<ConsentType[]>(initialConsentTypes);
@@ -580,6 +590,9 @@ export function SettingsForm({
                         prod_key: agillicProdKey,
                         prod_secret: agillicProdSecret,
                         prod_url: agillicProdUrl,
+                        webdav_username: agillicWebdavUser || undefined,
+                        webdav_password: agillicWebdavPass || undefined,
+                        webdav_path: agillicWebdavPath || undefined,
                       },
                       from_name: fromName || null,
                     })
@@ -618,6 +631,51 @@ export function SettingsForm({
                     {syncingTargetGroups ? (<><CircleNotch className="mr-2 h-3 w-3 animate-spin" />Syncing...</>) : (<><ArrowsClockwise className="mr-1 h-3 w-3" />Sync Target Groups</>)}
                   </Button>
                 </div>
+              </div>
+            )}
+            {agillicConnected && (
+              <div className="border-t pt-4 mt-2 grid gap-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WebDAV (Template Sync)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="webdavUser">WebDAV Username</Label>
+                    <Input id="webdavUser" placeholder="Username" value={agillicWebdavUser} onChange={(e) => setAgillicWebdavUser(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="webdavPass">WebDAV Password</Label>
+                    <Input id="webdavPass" type="password" placeholder="Password" value={agillicWebdavPass} onChange={(e) => setAgillicWebdavPass(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="webdavPath">Template Path</Label>
+                  <Input id="webdavPath" placeholder="/bcmportlet/webdav/bcm/media/templates/email/Bifrost/" value={agillicWebdavPath} onChange={(e) => setAgillicWebdavPath(e.target.value)} />
+                </div>
+                {agillicWebdavUser && agillicWebdavPass && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Email Templates</p>
+                      <p className="text-xs text-muted-foreground">Sync HTML templates from Agillic WebDAV.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={syncingTemplates}
+                      onClick={async () => {
+                        setSyncingTemplates(true);
+                        try {
+                          const res = await fetch("/api/agillic/sync-templates", { method: "POST" });
+                          const json = await res.json();
+                          if (res.ok) { toast.success(json.message); }
+                          else { toast.error(json.error || "Template sync failed"); }
+                        } catch { toast.error("Template sync failed"); }
+                        finally { setSyncingTemplates(false); }
+                      }}
+                    >
+                      {syncingTemplates ? (<><CircleNotch className="mr-2 h-3 w-3 animate-spin" />Syncing...</>) : (<><ArrowsClockwise className="mr-1 h-3 w-3" />Sync Templates</>)}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

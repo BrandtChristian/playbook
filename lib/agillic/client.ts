@@ -19,10 +19,13 @@ export interface AgillicCredentials {
 export interface AgillicOrgCredentials {
   staging_key: string;
   staging_secret: string;
-  staging_url: string;   // e.g. https://customer-stag.agillic.eu
+  staging_url: string;     // e.g. https://customer-stag.agillic.eu
   prod_key: string;
   prod_secret: string;
-  prod_url: string;      // e.g. https://customer-prod.agillic.eu
+  prod_url: string;        // e.g. https://customer-prod.agillic.eu
+  webdav_username?: string;
+  webdav_password?: string;
+  webdav_path?: string;    // e.g. /bcmportlet/webdav/bcm/media/templates/email/Forge/
 }
 
 export class AgillicClient {
