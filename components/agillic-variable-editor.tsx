@@ -187,19 +187,20 @@ export function AgillicVariableEditor({
     if (!testEmail) return;
     setSendingTest(true);
     try {
-      const res = await fetch("/api/send-test", {
+      // Save first to ensure campaign is staged with latest content
+      if (dirty) {
+        await handleSave(true);
+      }
+      // Test the staged campaign via Agillic
+      const res = await fetch(`/api/agillic/emails/${email.id}/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject,
-          bodyHtml: renderPreview(templateHtml, variables, values),
-          to: testEmail,
-        }),
+        body: JSON.stringify({ to: testEmail }),
       });
+      const json = await res.json();
       if (res.ok) {
-        toast.success("Test email sent");
+        toast.success(json.message || "Test email sent via Agillic");
       } else {
-        const json = await res.json();
         toast.error(json.error || "Test send failed");
       }
     } catch {

@@ -48,9 +48,15 @@ export class DiscoveryAPIClient {
 
   /**
    * Get all Person Data field definitions (the "schema" of recipients).
+   * Response is { name: "Person Data", fields: [...] } — we extract the fields array.
    */
   async getPersonData(): Promise<PersonDataField[]> {
-    return this.client.request<PersonDataField[]>("/discovery/persondata");
+    const response = await this.client.request<{ fields: PersonDataField[] } | PersonDataField[]>(
+      "/discovery/persondata"
+    );
+    // API returns { fields: [...] } wrapper, not a bare array
+    if (Array.isArray(response)) return response;
+    return response?.fields ?? [];
   }
 
   /**
@@ -58,6 +64,7 @@ export class DiscoveryAPIClient {
    */
   async getRecipientIdField(): Promise<PersonDataField | undefined> {
     const fields = await this.getPersonData();
+    if (!Array.isArray(fields)) return undefined;
     return fields.find((f) => f.identifier === true);
   }
 

@@ -278,7 +278,7 @@ async function handleAgillicSend(
     const stageResult = await stagingMessaging.stageCampaign({
       name: campaignName,
       subject: campaign.subject,
-      templateName: `Forge/${templateFilename}`,
+      templateName: templateFilename,
       targetGroupName: tgName,
       senderName: org.from_name || undefined,
       senderEmail: org.from_email || undefined,

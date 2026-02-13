@@ -203,73 +203,87 @@ async function handleAgillicTest(
   }
 
   try {
-    // Test emails use staging credentials only
+    console.log(`[agillic-test] Starting test send to "${to}"`);
+    console.log(`[agillic-test] Using staging key: ${creds.staging_key?.slice(0, 4)}...`);
+
     const client = createStagingClient(creds);
-    const assets = new AssetsAPIClient(client);
-    const messaging = new MessageAPIClient(client);
     const discovery = new DiscoveryAPIClient(client);
     const recipients = new RecipientsAPIClient(client);
 
     // Step 1: Verify recipient exists in Agillic
+    console.log(`[agillic-test] Step 1: Looking up recipient ID field...`);
     const recipientIdField = await discovery.getRecipientIdField();
+    console.log(`[agillic-test] Recipient ID field: ${recipientIdField?.name ?? "not found, defaulting to EMAIL"}`);
+
+    console.log(`[agillic-test] Step 1b: Looking up recipient by email: ${to}`);
     const recipient = await recipients.getByEmail(to);
 
     if (!recipient) {
+      console.log(`[agillic-test] Recipient not found in Agillic`);
       return NextResponse.json(
         { error: `Recipient "${to}" not found in Agillic. The test email address must exist as a recipient in your Agillic instance.` },
         { status: 400 }
       );
     }
 
-    // Get the recipient ID value
     const recipientIdFieldName = recipientIdField?.name || "EMAIL";
     const recipientId = recipient.personData?.[recipientIdFieldName] || to;
+    console.log(`[agillic-test] Recipient found, ID: ${recipientId}`);
 
-    // Step 2: Convert Liquid to Agillic syntax and upload as template
+    // Step 2: Convert and upload template
+    console.log(`[agillic-test] Step 2: Uploading template...`);
+    const assets = new AssetsAPIClient(client);
     const agillicHtml = convertLiquidToAgillic(bodyHtml);
     const testId = `test-${Date.now()}`;
     const templateFilename = `forge-test-${testId}.html`;
     await assets.uploadTemplate(agillicHtml, templateFilename);
+    console.log(`[agillic-test] Template uploaded: ${templateFilename}`);
 
-    // Step 3: Use a generic target group for test sends
+    // Step 3: Stage test campaign
     const targetGroup = "All Recipients";
-
-    // Step 4: Stage a test campaign
     const campaignName = `forge-test-${testId}`;
+    console.log(`[agillic-test] Step 3: Staging campaign "${campaignName}" targeting "${targetGroup}"`);
+
+    const messaging = new MessageAPIClient(client);
     const stageResult = await messaging.stageCampaign({
       name: campaignName,
       subject,
-      templateName: `Forge/${templateFilename}`,
+      templateName: templateFilename,
       targetGroupName: targetGroup,
       senderName: org.from_name || undefined,
       senderEmail: org.from_email || undefined,
       utmCampaign: campaignName,
       blockGroups: [],
     });
+    console.log(`[agillic-test] Staged, taskId: ${stageResult.taskId}`);
 
-    // Step 5: Wait for staging (known 5s propagation delay)
+    // Step 4: Wait for propagation
+    console.log(`[agillic-test] Step 4: Waiting 5s for propagation...`);
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    // Poll for task completion
     for (let i = 0; i < 10; i++) {
       try {
         const status = await messaging.getTaskStatus(stageResult.taskId);
+        console.log(`[agillic-test] Poll ${i + 1}: status=${status.status}`);
         if (status.status === "completed") break;
         if (status.status === "failed") {
-          throw new Error("Test campaign staging failed");
+          throw new Error("Test campaign staging failed in Agillic");
         }
-      } catch {
-        // Keep polling
+      } catch (pollErr) {
+        if (pollErr instanceof Error && pollErr.message.includes("staging failed")) throw pollErr;
+        console.log(`[agillic-test] Poll ${i + 1}: error (retrying)`, pollErr instanceof Error ? pollErr.message : pollErr);
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    // Step 6: Send the test
+    // Step 5: Send the test
+    console.log(`[agillic-test] Step 5: Sending test to ${recipientId}`);
     const testResult = await messaging.testCampaign(
       campaignName,
       recipientId,
       true
     );
+    console.log(`[agillic-test] Test result: success=${testResult.success}, message=${testResult.message}`);
 
     return NextResponse.json({
       message: testResult.success
@@ -279,6 +293,10 @@ async function handleAgillicTest(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Agillic test send failed";
+    console.error(`[agillic-test] FAILED:`, message);
+    if (error instanceof Error && error.stack) {
+      console.error(`[agillic-test] Stack:`, error.stack);
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

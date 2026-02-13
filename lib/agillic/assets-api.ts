@@ -18,7 +18,7 @@ export class AssetsAPIClient {
   async uploadTemplate(
     html: string,
     filename: string,
-    folder: string = "Forge"
+    folder?: string
   ): Promise<void> {
     const buffer = Buffer.from(html, "utf-8");
     await this.client.uploadFile(

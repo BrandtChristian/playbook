@@ -67,7 +67,7 @@ export class MessageAPIClient {
   }
 
   /**
-   * Stage (create) a new campaign. Async — returns a taskId.
+   * Stage (create) a new campaign via V2. Async — returns a taskId only.
    */
   async stageCampaign(payload: StagePayload): Promise<StageResponse> {
     return this.client.request<StageResponse>(
@@ -82,11 +82,42 @@ export class MessageAPIClient {
   }
 
   /**
+   * Stage (create) a new campaign via V1. Synchronous — returns campaignId directly.
+   * Ported from Bifrost. Use this when you need the campaign ID for testing.
+   */
+  async stageCampaignV1(
+    payload: StagePayload
+  ): Promise<{ campaignId: string; campaignName: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await this.client.request<any>(
+      "/messages/v1/campaign/email/:stage",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const campaignId =
+      result?.data?.campaignId || result?.campaignId || result?.id;
+
+    if (!campaignId) {
+      throw new Error(
+        "No campaignId returned from V1 stage: " + JSON.stringify(result)
+      );
+    }
+
+    return {
+      campaignId,
+      campaignName: payload.name,
+    };
+  }
+
+  /**
    * Edit an existing campaign. Async — returns a taskId.
    */
   async editCampaign(
     campaignId: string,
-    payload: Omit<StagePayload, "name" | "templateName"> & {
+    payload: Omit<StagePayload, "name" | "templateName" | "blockGroups"> & {
       blockGroups: EditBlockGroup[];
     }
   ): Promise<StageResponse> {
