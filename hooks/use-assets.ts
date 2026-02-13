@@ -17,6 +17,7 @@ export interface Asset {
     compression_ratio?: number;
   };
   folder_id: string | null;
+  alt_text?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -139,6 +140,41 @@ export function useAssets(options?: { folderId?: string | null; search?: string 
     return json.folder as AssetFolder;
   }, []);
 
+  const updateAsset = useCallback(
+    async (
+      id: string,
+      data: { name?: string; folder_id?: string | null; alt_text?: string }
+    ) => {
+      const res = await fetch(`/api/assets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update asset");
+      // Update local state
+      setAssets((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, ...json.asset } : a))
+      );
+      return json.asset as Asset;
+    },
+    []
+  );
+
+  const moveAssets = useCallback(
+    async (assetIds: string[], folderId: string | null) => {
+      const res = await fetch("/api/assets/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_ids: assetIds, folder_id: folderId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to move assets");
+      return json.updated as number;
+    },
+    []
+  );
+
   const deleteFolder = useCallback(async (id: string) => {
     const res = await fetch(`/api/assets/folders/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to delete folder");
@@ -163,6 +199,8 @@ export function useAssets(options?: { folderId?: string | null; search?: string 
     loadFolders,
     uploadAsset,
     deleteAsset,
+    updateAsset,
+    moveAssets,
     createFolder,
     renameFolder,
     deleteFolder,

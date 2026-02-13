@@ -12,6 +12,7 @@ import {
   Trash,
   ImageSquare,
 } from "@phosphor-icons/react";
+import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ interface AssetFolderNavigationProps {
   onRenameFolder: (id: string, name: string) => Promise<void>;
   onDeleteFolder: (id: string) => Promise<void>;
   isAdmin: boolean;
+  isDropTarget?: boolean;
 }
 
 function FolderTreeItem({
@@ -47,6 +49,7 @@ function FolderTreeItem({
   onRenameFolder,
   onDeleteFolder,
   isAdmin,
+  isDropTarget = false,
   depth = 0,
 }: {
   folder: AssetFolder;
@@ -56,6 +59,7 @@ function FolderTreeItem({
   onRenameFolder: (id: string, name: string) => Promise<void>;
   onDeleteFolder: (id: string) => Promise<void>;
   isAdmin: boolean;
+  isDropTarget?: boolean;
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -64,14 +68,22 @@ function FolderTreeItem({
   const [subfoldersOpen, setSubfoldersOpen] = useState(false);
   const [subfolderName, setSubfolderName] = useState("");
 
+  const { setNodeRef, isOver } = useDroppable({
+    id: folder.id,
+    disabled: !isDropTarget,
+  });
+
   const isActive = currentFolderId === folder.id;
   const hasChildren = folder.children && folder.children.length > 0;
 
   return (
     <div>
       <div
+        ref={setNodeRef}
         className={`group flex items-center gap-1 py-1 px-2 cursor-pointer text-sm transition-colors ${
-          isActive
+          isOver
+            ? "bg-indigo-100 dark:bg-indigo-950/40 ring-1 ring-indigo-400 ring-inset"
+            : isActive
             ? "bg-accent text-accent-foreground font-medium"
             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         }`}
@@ -163,6 +175,7 @@ function FolderTreeItem({
             onRenameFolder={onRenameFolder}
             onDeleteFolder={onDeleteFolder}
             isAdmin={isAdmin}
+            isDropTarget={isDropTarget}
             depth={depth + 1}
           />
         ))}
@@ -248,16 +261,25 @@ export function AssetFolderNavigation({
   onRenameFolder,
   onDeleteFolder,
   isAdmin,
+  isDropTarget = false,
 }: AssetFolderNavigationProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+
+  const { setNodeRef: setRootRef, isOver: isRootOver } = useDroppable({
+    id: "root-drop",
+    disabled: !isDropTarget,
+  });
 
   return (
     <div className="w-full">
       {/* All Assets */}
       <div
+        ref={setRootRef}
         className={`flex items-center gap-1.5 py-1.5 px-2 cursor-pointer text-sm transition-colors ${
-          currentFolderId === null
+          isRootOver
+            ? "bg-indigo-100 dark:bg-indigo-950/40 ring-1 ring-indigo-400 ring-inset"
+            : currentFolderId === null
             ? "bg-accent text-accent-foreground font-medium"
             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         }`}
@@ -278,6 +300,7 @@ export function AssetFolderNavigation({
           onRenameFolder={onRenameFolder}
           onDeleteFolder={onDeleteFolder}
           isAdmin={isAdmin}
+          isDropTarget={isDropTarget}
         />
       ))}
 

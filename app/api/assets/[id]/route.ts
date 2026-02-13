@@ -37,6 +37,63 @@ export async function GET(
   return NextResponse.json({ asset: { ...asset, url: publicUrl } });
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  const { id } = await params;
+
+  if (user.role !== "admin" && user.role !== "owner") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (typeof body.name === "string" && body.name.trim()) {
+    updates.name = body.name.trim();
+  }
+  if (body.folder_id !== undefined) {
+    updates.folder_id = body.folder_id;
+  }
+  if (typeof body.alt_text === "string") {
+    updates.alt_text = body.alt_text;
+  }
+
+  if (Object.keys(updates).length === 1) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+
+  const { data: asset, error } = await supabase
+    .from("assets")
+    .update(updates)
+    .eq("id", id)
+    .eq("org_id", user.org_id)
+    .eq("is_active", true)
+    .select("*, asset_folders(id, name, slug)")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const storage = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const {
+    data: { publicUrl },
+  } = storage.storage
+    .from("organization-assets")
+    .getPublicUrl(asset.storage_path);
+
+  return NextResponse.json({ asset: { ...asset, url: publicUrl } });
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

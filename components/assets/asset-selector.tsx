@@ -21,7 +21,7 @@ import type { Asset, AssetFolder } from "@/hooks/use-assets";
 interface AssetSelectorProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (asset: { url: string; name: string; width?: number; height?: number }) => void;
+  onSelect: (asset: { url: string; name: string; width?: number; height?: number; alt_text?: string }) => void;
 }
 
 export function AssetSelector({ isOpen, onClose, onSelect }: AssetSelectorProps) {
@@ -118,6 +118,7 @@ export function AssetSelector({ isOpen, onClose, onSelect }: AssetSelectorProps)
       name: selected.name,
       width: selected.dimensions?.width,
       height: selected.dimensions?.height,
+      alt_text: selected.alt_text || undefined,
     });
     onClose();
   }

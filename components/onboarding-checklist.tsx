@@ -12,34 +12,27 @@ import {
   X,
 } from "@phosphor-icons/react";
 
-export type OnboardingState = {
-  resend_connected: boolean;
-  contacts_imported: boolean;
-  segment_created: boolean;
-  brand_built: boolean;
-  playbook_launched: boolean;
-  campaign_sent: boolean;
-};
+export type OnboardingState = Record<string, boolean>;
 
-const STEPS = [
-  { key: "resend_connected", label: "Connect Resend", description: "Link your sending infrastructure so Forge can deliver emails.", href: "/settings" },
-  { key: "contacts_imported", label: "Import contacts", description: "Add the people you want to reach \u2014 manually or via CSV.", href: "/contacts" },
-  { key: "segment_created", label: "Create a segment", description: "Group contacts for targeted campaigns.", href: "/segments" },
-  { key: "brand_built", label: "Build brand template", description: "Set your colors, logo, and footer for consistent emails.", href: "/templates" },
-  { key: "playbook_launched", label: "Build a flow", description: "Create an automated email journey \u2014 start from a template or from scratch.", href: "/flows" },
-  { key: "campaign_sent", label: "Send first campaign", description: "Hit send and watch the stats roll in.", href: "/campaigns" },
-] as const;
+export type OnboardingStep = {
+  key: string;
+  label: string;
+  description: string;
+  href: string;
+};
 
 export function OnboardingChecklist({
   state,
+  steps,
   orgId,
 }: {
   state: OnboardingState;
+  steps: OnboardingStep[];
   orgId: string;
 }) {
   const router = useRouter();
-  const completed = STEPS.filter((s) => state[s.key]).length;
-  const total = STEPS.length;
+  const completed = steps.filter((s) => state[s.key]).length;
+  const total = steps.length;
   const allDone = completed === total;
   const progress = Math.round((completed / total) * 100);
 
@@ -73,7 +66,7 @@ export function OnboardingChecklist({
         </div>
       </CardHeader>
       <CardContent className="grid gap-1">
-        {STEPS.map((step) => {
+        {steps.map((step) => {
           const done = state[step.key];
           return (
             <Link
