@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings-form";
 import { TeamMembers } from "@/components/team-members";
+import { TeamsManager } from "@/components/admin/teams-manager";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -44,6 +45,16 @@ export default async function SettingsPage() {
         hasResendKey={!!user.organizations.resend_api_key}
         segments={segments ?? []}
       />
+      {user.organizations.email_provider === "agillic" &&
+        (user.role === "admin" || user.role === "owner") && (
+        <TeamsManager
+          members={(members ?? []).map((m) => ({
+            id: m.id,
+            full_name: m.full_name,
+            role: m.role,
+          }))}
+        />
+      )}
     </div>
   );
 }

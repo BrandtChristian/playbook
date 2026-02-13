@@ -39,6 +39,14 @@ type Org = {
   from_email: string | null;
   from_name: string | null;
   domain_verified: boolean;
+  email_provider: "resend" | "agillic";
+  agillic_credentials: {
+    staging_key: string;
+    staging_secret: string;
+    prod_key: string;
+    prod_secret: string;
+    instance_url: string;
+  } | null;
 };
 
 type ResendDomain = {
@@ -92,10 +100,22 @@ export function SettingsForm({
   consentTypes: ConsentType[];
 }) {
   const [name, setName] = useState(org.name);
+  const [emailProvider, setEmailProvider] = useState<"resend" | "agillic">(org.email_provider ?? "resend");
   const [apiKey, setApiKey] = useState(org.resend_api_key ?? "");
   const [fromName, setFromName] = useState(org.from_name ?? "");
   const [fromPrefix, setFromPrefix] = useState("");
   const [selectedDomain, setSelectedDomain] = useState("");
+
+  // Agillic credentials state
+  const [agillicStagingKey, setAgillicStagingKey] = useState(org.agillic_credentials?.staging_key ?? "");
+  const [agillicStagingSecret, setAgillicStagingSecret] = useState(org.agillic_credentials?.staging_secret ?? "");
+  const [agillicProdKey, setAgillicProdKey] = useState(org.agillic_credentials?.prod_key ?? "");
+  const [agillicProdSecret, setAgillicProdSecret] = useState(org.agillic_credentials?.prod_secret ?? "");
+  const [agillicUrl, setAgillicUrl] = useState(org.agillic_credentials?.instance_url ?? "");
+  const [testingAgillic, setTestingAgillic] = useState(false);
+  const [agillicConnected, setAgillicConnected] = useState(!!org.agillic_credentials?.staging_key);
+  const [savingAgillic, setSavingAgillic] = useState(false);
+  const [syncingTargetGroups, setSyncingTargetGroups] = useState(false);
 
   // Consent types state
   const [consentTypes, setConsentTypes] = useState<ConsentType[]>(initialConsentTypes);
@@ -373,7 +393,204 @@ export function SettingsForm({
         </Card>
       </form>
 
+      {/* Email Provider Selector */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Email Provider</CardTitle>
+          <CardDescription>
+            Choose your email sending infrastructure.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={async () => {
+                setEmailProvider("resend");
+                const supabase = createClient();
+                await supabase
+                  .from("organizations")
+                  .update({ email_provider: "resend" })
+                  .eq("id", org.id);
+                router.refresh();
+              }}
+              className={`flex flex-col items-start gap-1 p-4 border text-left transition-colors hover:bg-muted/50 ${
+                emailProvider === "resend" ? "border-primary bg-muted/30" : ""
+              }`}
+            >
+              <span className="font-medium text-sm">Resend</span>
+              <span className="text-xs text-muted-foreground">
+                Direct email sending via Resend API
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setEmailProvider("agillic");
+                const supabase = createClient();
+                await supabase
+                  .from("organizations")
+                  .update({ email_provider: "agillic" })
+                  .eq("id", org.id);
+                router.refresh();
+              }}
+              className={`flex flex-col items-start gap-1 p-4 border text-left transition-colors hover:bg-muted/50 ${
+                emailProvider === "agillic" ? "border-primary bg-muted/30" : ""
+              }`}
+            >
+              <span className="font-medium text-sm">Agillic</span>
+              <span className="text-xs text-muted-foreground">
+                Enterprise marketing via Agillic platform
+              </span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agillic Connection */}
+      {emailProvider === "agillic" && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Agillic Connection</CardTitle>
+                <CardDescription>
+                  Connect your Agillic instance to start sending campaigns.
+                </CardDescription>
+              </div>
+              {agillicConnected ? (
+                <Badge className="gap-1">
+                  <CheckCircle className="h-3 w-3" weight="fill" />
+                  Connected
+                </Badge>
+              ) : (
+                <Badge variant="outline">Not connected</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="agillicUrl">Instance URL</Label>
+              <Input
+                id="agillicUrl"
+                placeholder="https://customer.agillic.net"
+                value={agillicUrl}
+                onChange={(e) => setAgillicUrl(e.target.value)}
+              />
+            </div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Staging Credentials</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="agillicStagingKey">Staging Key</Label>
+                <Input id="agillicStagingKey" placeholder="Developer key" value={agillicStagingKey} onChange={(e) => setAgillicStagingKey(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="agillicStagingSecret">Staging Secret</Label>
+                <Input id="agillicStagingSecret" type="password" placeholder="Developer secret" value={agillicStagingSecret} onChange={(e) => setAgillicStagingSecret(e.target.value)} />
+              </div>
+            </div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Production Credentials</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="agillicProdKey">Production Key</Label>
+                <Input id="agillicProdKey" placeholder="Developer key" value={agillicProdKey} onChange={(e) => setAgillicProdKey(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="agillicProdSecret">Production Secret</Label>
+                <Input id="agillicProdSecret" type="password" placeholder="Developer secret" value={agillicProdSecret} onChange={(e) => setAgillicProdSecret(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="agillicFromName">Sender name</Label>
+              <Input id="agillicFromName" placeholder={name || "Your Company"} value={fromName} onChange={(e) => setFromName(e.target.value)} />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={testingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicUrl}
+                onClick={async () => {
+                  setTestingAgillic(true);
+                  try {
+                    const res = await fetch("/api/agillic/validate", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ api_key: agillicStagingKey, api_secret: agillicStagingSecret, instance_url: agillicUrl }),
+                    });
+                    if (res.ok) {
+                      toast.success("Staging connected!");
+                      setAgillicConnected(true);
+                    } else {
+                      const json = await res.json();
+                      toast.error(json.error || "Staging connection failed");
+                    }
+                  } catch { toast.error("Failed to test staging connection"); }
+                  finally { setTestingAgillic(false); }
+                }}
+              >
+                {testingAgillic ? (<><CircleNotch className="mr-2 h-4 w-4 animate-spin" />Testing...</>) : "Test Staging"}
+              </Button>
+              <Button
+                type="button"
+                disabled={savingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicUrl}
+                onClick={async () => {
+                  setSavingAgillic(true);
+                  const supabase = createClient();
+                  const { error } = await supabase
+                    .from("organizations")
+                    .update({
+                      agillic_credentials: {
+                        staging_key: agillicStagingKey,
+                        staging_secret: agillicStagingSecret,
+                        prod_key: agillicProdKey,
+                        prod_secret: agillicProdSecret,
+                        instance_url: agillicUrl,
+                      },
+                      from_name: fromName || null,
+                    })
+                    .eq("id", org.id);
+                  setSavingAgillic(false);
+                  if (error) { toast.error("Failed to save"); }
+                  else { toast.success("Agillic settings saved"); setAgillicConnected(true); router.refresh(); }
+                }}
+              >
+                {savingAgillic ? "Saving..." : "Save Agillic Settings"}
+              </Button>
+            </div>
+            {agillicConnected && agillicProdKey && (
+              <div className="border-t pt-4 mt-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Target Groups</p>
+                    <p className="text-xs text-muted-foreground">Sync from Agillic to see available target groups.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={syncingTargetGroups}
+                    onClick={async () => {
+                      setSyncingTargetGroups(true);
+                      try {
+                        const res = await fetch("/api/agillic/sync-target-groups", { method: "POST" });
+                        const json = await res.json();
+                        if (res.ok) { toast.success(json.message); }
+                        else { toast.error(json.error || "Sync failed"); }
+                      } catch { toast.error("Sync failed"); }
+                      finally { setSyncingTargetGroups(false); }
+                    }}
+                  >
+                    {syncingTargetGroups ? (<><CircleNotch className="mr-2 h-3 w-3 animate-spin" />Syncing...</>) : (<><ArrowsClockwise className="mr-1 h-3 w-3" />Sync Target Groups</>)}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Resend Connection */}
+      {emailProvider === "resend" && (<>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -570,8 +787,10 @@ export function SettingsForm({
           </Card>
         </form>
       )}
+      </>)}
 
-      {/* Consent Types */}
+      {/* Consent Types — only shown for Resend orgs */}
+      {emailProvider === "resend" && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -806,6 +1025,8 @@ export function SettingsForm({
           )}
         </CardContent>
       </Card>
+
+      )}
 
       {/* Edit Consent Type Dialog */}
       <Dialog

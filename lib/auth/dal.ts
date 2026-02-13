@@ -21,6 +21,14 @@ export type Profile = {
     domain_verified: boolean;
     onboarding_completed: boolean;
     brand_config: Record<string, unknown> | null;
+    email_provider: "resend" | "agillic";
+    agillic_credentials: {
+      staging_key: string;
+      staging_secret: string;
+      prod_key: string;
+      prod_secret: string;
+      instance_url: string;
+    } | null;
     created_at: string;
   };
 };

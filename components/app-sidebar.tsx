@@ -29,15 +29,15 @@ import {
 } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/user-menu";
 
-const navItems = [
-  { title: "Dashboard", href: "/", icon: Lightning },
-  { title: "Flows", href: "/flows", icon: TreeStructure },
-  { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt },
-  { title: "Emails", href: "/emails", icon: Envelope },
-  { title: "Templates", href: "/templates", icon: Layout },
-  { title: "Contacts", href: "/contacts", icon: Users },
-  { title: "Segments", href: "/segments", icon: ListDashes },
-  { title: "Data", href: "/data", icon: Database },
+const allNavItems = [
+  { title: "Dashboard", href: "/", icon: Lightning, resendOnly: false },
+  { title: "Flows", href: "/flows", icon: TreeStructure, resendOnly: true },
+  { title: "Campaigns", href: "/campaigns", icon: PaperPlaneTilt, resendOnly: false },
+  { title: "Emails", href: "/emails", icon: Envelope, resendOnly: false },
+  { title: "Templates", href: "/templates", icon: Layout, resendOnly: false },
+  { title: "Contacts", href: "/contacts", icon: Users, resendOnly: false },
+  { title: "Segments", href: "/segments", icon: ListDashes, resendOnly: true },
+  { title: "Data", href: "/data", icon: Database, resendOnly: true },
 ];
 
 const settingsItems = [
@@ -45,8 +45,11 @@ const settingsItems = [
   { title: "Settings", href: "/settings", icon: Gear },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ emailProvider = "resend" }: { emailProvider?: "resend" | "agillic" }) {
   const pathname = usePathname();
+  const navItems = emailProvider === "agillic"
+    ? allNavItems.filter((item) => !item.resendOnly)
+    : allNavItems;
 
   return (
     <Sidebar>

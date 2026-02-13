@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
       const [{ data: org }, { data: customFields }] = await Promise.all([
         supabase
           .from("organizations")
-          .select("name, from_name, brand_config")
+          .select("name, from_name, brand_config, email_provider")
           .eq("id", profile.org_id)
           .single(),
         supabase
@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
         orgContext = {
           orgName: org.name,
           fromName: org.from_name ?? undefined,
+          emailProvider: org.email_provider ?? "resend",
           brandConfig: org.brand_config as OrgContext["brandConfig"],
           customFieldNames: (customFields ?? []).map((f: { field_name: string }) => f.field_name),
         };

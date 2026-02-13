@@ -9,6 +9,7 @@ export const anthropic = new Anthropic();
 export type OrgContext = {
   orgName: string;
   fromName?: string;
+  emailProvider?: "resend" | "agillic";
   brandConfig?: {
     primary_color?: string;
     secondary_color?: string;
@@ -94,12 +95,34 @@ export function buildSystemPrompt(orgContext?: OrgContext): string {
     }
   }
 
-  const allVars = STANDARD_LIQUID_VARS.map((v) => `{{ ${v} }}`).join(", ");
-  const customVars = (orgContext?.customFieldNames ?? [])
-    .map((f) => `{{ data.${f} }}`)
-    .join(", ");
+  const isAgillic = orgContext?.emailProvider === "agillic";
 
-  sections.push(`
+  if (isAgillic) {
+    // Agillic uses <persondata>FIELDNAME</persondata> syntax
+    const agillicVars = [
+      "<persondata>FIRSTNAME</persondata>",
+      "<persondata>LASTNAME</persondata>",
+      "<persondata>EMAIL</persondata>",
+    ].join(", ");
+
+    sections.push(`
+Rules:
+- Use Agillic personalization tags for recipient data: ${agillicVars}
+- The format is <persondata>FIELDNAME</persondata> where FIELDNAME is uppercase
+- Write in HTML format suitable for email (use <h1>, <h2>, <p>, <ul>, <li>, <a>, <strong>, <em>)
+- Keep emails concise — aim for 100-200 words for the body
+- Use a warm, conversational tone unless told otherwise
+- Include a clear call-to-action where appropriate
+- Do NOT include <html>, <head>, <body> tags — only the inner content
+- Do NOT include subject lines in the body — those are separate
+- Do NOT use markdown — use HTML tags only`);
+  } else {
+    const allVars = STANDARD_LIQUID_VARS.map((v) => `{{ ${v} }}`).join(", ");
+    const customVars = (orgContext?.customFieldNames ?? [])
+      .map((f) => `{{ data.${f} }}`)
+      .join(", ");
+
+    sections.push(`
 Rules:
 - Use Liquid template variables for personalization: ${allVars}${customVars ? `\n- Custom contact fields also available: ${customVars}` : ""}
 - Write in HTML format suitable for email (use <h1>, <h2>, <p>, <ul>, <li>, <a>, <strong>, <em>)
@@ -109,6 +132,7 @@ Rules:
 - Do NOT include <html>, <head>, <body> tags — only the inner content
 - Do NOT include subject lines in the body — those are separate
 - Do NOT use markdown — use HTML tags only`);
+  }
 
   return sections.join("\n");
 }

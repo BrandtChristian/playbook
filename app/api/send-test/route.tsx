@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getResendClient, renderTestEmail, renderEmail } from "@/lib/resend";
 import { renderTemplate, sampleData } from "@/lib/liquid";
+import { createStagingClient } from "@/lib/agillic/client";
+import { MessageAPIClient } from "@/lib/agillic/message-api";
+import { AssetsAPIClient } from "@/lib/agillic/assets-api";
+import { DiscoveryAPIClient } from "@/lib/agillic/discovery-api";
+import { RecipientsAPIClient } from "@/lib/agillic/recipients-api";
+import { convertLiquidToAgillic } from "@/lib/agillic/variable-map";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -25,15 +31,12 @@ export async function POST(request: NextRequest) {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("resend_api_key, from_email, from_name, brand_config")
+    .select("resend_api_key, from_email, from_name, brand_config, email_provider, agillic_credentials")
     .eq("id", profile.org_id)
     .single();
 
-  if (!org?.resend_api_key || !org?.from_email) {
-    return NextResponse.json(
-      { error: "Configure Resend API key and sender address in Settings first" },
-      { status: 400 }
-    );
+  if (!org) {
+    return NextResponse.json({ error: "No organization" }, { status: 400 });
   }
 
   const { subject, bodyHtml, to, realLinks } = await request.json();
@@ -41,6 +44,19 @@ export async function POST(request: NextRequest) {
   if (!subject || !bodyHtml || !to) {
     return NextResponse.json(
       { error: "subject, bodyHtml, and to are required" },
+      { status: 400 }
+    );
+  }
+
+  // === AGILLIC TEST PATH ===
+  if (org.email_provider === "agillic") {
+    return handleAgillicTest(org, subject, bodyHtml, to);
+  }
+
+  // === RESEND TEST PATH (original, unchanged) ===
+  if (!org.resend_api_key || !org.from_email) {
+    return NextResponse.json(
+      { error: "Configure Resend API key and sender address in Settings first" },
       { status: 400 }
     );
   }
@@ -153,4 +169,115 @@ export async function POST(request: NextRequest) {
       ? "Test email sent with real unsubscribe/preference links"
       : "Test email sent",
   });
+}
+
+/**
+ * Send a test email via Agillic Decentralised Messaging API.
+ *
+ * Flow: Upload template -> Stage test campaign -> Wait -> Test with recipient
+ */
+async function handleAgillicTest(
+  org: {
+    from_name: string | null;
+    from_email: string | null;
+    agillic_credentials: unknown;
+  },
+  subject: string,
+  bodyHtml: string,
+  to: string,
+) {
+  const creds = org.agillic_credentials as {
+    staging_key: string;
+    staging_secret: string;
+    prod_key: string;
+    prod_secret: string;
+    instance_url: string;
+  } | null;
+
+  if (!creds) {
+    return NextResponse.json(
+      { error: "Configure Agillic credentials in Settings first" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // Test emails use staging credentials only
+    const client = createStagingClient(creds);
+    const assets = new AssetsAPIClient(client);
+    const messaging = new MessageAPIClient(client);
+    const discovery = new DiscoveryAPIClient(client);
+    const recipients = new RecipientsAPIClient(client);
+
+    // Step 1: Verify recipient exists in Agillic
+    const recipientIdField = await discovery.getRecipientIdField();
+    const recipient = await recipients.getByEmail(to);
+
+    if (!recipient) {
+      return NextResponse.json(
+        { error: `Recipient "${to}" not found in Agillic. The test email address must exist as a recipient in your Agillic instance.` },
+        { status: 400 }
+      );
+    }
+
+    // Get the recipient ID value
+    const recipientIdFieldName = recipientIdField?.name || "EMAIL";
+    const recipientId = recipient.personData?.[recipientIdFieldName] || to;
+
+    // Step 2: Convert Liquid to Agillic syntax and upload as template
+    const agillicHtml = convertLiquidToAgillic(bodyHtml);
+    const testId = `test-${Date.now()}`;
+    const templateFilename = `forge-test-${testId}.html`;
+    await assets.uploadTemplate(agillicHtml, templateFilename);
+
+    // Step 3: Use a generic target group for test sends
+    const targetGroup = "All Recipients";
+
+    // Step 4: Stage a test campaign
+    const campaignName = `forge-test-${testId}`;
+    const stageResult = await messaging.stageCampaign({
+      name: campaignName,
+      subject,
+      templateName: `Forge/${templateFilename}`,
+      targetGroupName: targetGroup,
+      senderName: org.from_name || undefined,
+      senderEmail: org.from_email || undefined,
+      utmCampaign: campaignName,
+      blockGroups: [],
+    });
+
+    // Step 5: Wait for staging (known 5s propagation delay)
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Poll for task completion
+    for (let i = 0; i < 10; i++) {
+      try {
+        const status = await messaging.getTaskStatus(stageResult.taskId);
+        if (status.status === "completed") break;
+        if (status.status === "failed") {
+          throw new Error("Test campaign staging failed");
+        }
+      } catch {
+        // Keep polling
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    // Step 6: Send the test
+    const testResult = await messaging.testCampaign(
+      campaignName,
+      recipientId,
+      true
+    );
+
+    return NextResponse.json({
+      message: testResult.success
+        ? "Test email sent via Agillic"
+        : "Test email may have been sent — check Agillic for status",
+      agillicResponse: testResult.message,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Agillic test send failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
