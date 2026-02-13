@@ -25,9 +25,10 @@ export type Profile = {
     agillic_credentials: {
       staging_key: string;
       staging_secret: string;
+      staging_url: string;
       prod_key: string;
       prod_secret: string;
-      instance_url: string;
+      prod_url: string;
     } | null;
     created_at: string;
   };

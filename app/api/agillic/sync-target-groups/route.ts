@@ -44,9 +44,10 @@ export async function POST() {
   const creds = org.agillic_credentials as {
     staging_key: string;
     staging_secret: string;
+    staging_url: string;
     prod_key: string;
     prod_secret: string;
-    instance_url: string;
+    prod_url: string;
   };
 
   if (!creds.prod_key || !creds.prod_secret) {

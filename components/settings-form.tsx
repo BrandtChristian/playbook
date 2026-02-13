@@ -43,9 +43,10 @@ type Org = {
   agillic_credentials: {
     staging_key: string;
     staging_secret: string;
+    staging_url: string;
     prod_key: string;
     prod_secret: string;
-    instance_url: string;
+    prod_url: string;
   } | null;
 };
 
@@ -111,7 +112,8 @@ export function SettingsForm({
   const [agillicStagingSecret, setAgillicStagingSecret] = useState(org.agillic_credentials?.staging_secret ?? "");
   const [agillicProdKey, setAgillicProdKey] = useState(org.agillic_credentials?.prod_key ?? "");
   const [agillicProdSecret, setAgillicProdSecret] = useState(org.agillic_credentials?.prod_secret ?? "");
-  const [agillicUrl, setAgillicUrl] = useState(org.agillic_credentials?.instance_url ?? "");
+  const [agillicStagingUrl, setAgillicStagingUrl] = useState(org.agillic_credentials?.staging_url ?? "");
+  const [agillicProdUrl, setAgillicProdUrl] = useState(org.agillic_credentials?.prod_url ?? "");
   const [testingAgillic, setTestingAgillic] = useState(false);
   const [agillicConnected, setAgillicConnected] = useState(!!org.agillic_credentials?.staging_key);
   const [savingAgillic, setSavingAgillic] = useState(false);
@@ -470,15 +472,27 @@ export function SettingsForm({
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="agillicUrl">Instance URL</Label>
+              <Label htmlFor="agillicCompanyId">Agillic Company ID</Label>
               <Input
-                id="agillicUrl"
-                placeholder="https://customer.agillic.net"
-                value={agillicUrl}
-                onChange={(e) => setAgillicUrl(e.target.value)}
+                id="agillicCompanyId"
+                placeholder="e.g. dwarf"
+                onChange={(e) => {
+                  const id = e.target.value.trim().toLowerCase();
+                  if (id) {
+                    setAgillicStagingUrl(`https://${id}-stag.agillic.eu`);
+                    setAgillicProdUrl(`https://${id}-prod.agillic.eu`);
+                  }
+                }}
               />
+              <p className="text-xs text-muted-foreground">
+                Auto-fills staging and production URLs. Edit below to override.
+              </p>
             </div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Staging Credentials</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Staging Environment</p>
+            <div className="grid gap-2">
+              <Label htmlFor="agillicStagingUrl">Staging URL</Label>
+              <Input id="agillicStagingUrl" placeholder="https://customer-stag.agillic.eu" value={agillicStagingUrl} onChange={(e) => setAgillicStagingUrl(e.target.value)} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="agillicStagingKey">Staging Key</Label>
@@ -489,7 +503,11 @@ export function SettingsForm({
                 <Input id="agillicStagingSecret" type="password" placeholder="Developer secret" value={agillicStagingSecret} onChange={(e) => setAgillicStagingSecret(e.target.value)} />
               </div>
             </div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Production Credentials</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Production Environment</p>
+            <div className="grid gap-2">
+              <Label htmlFor="agillicProdUrl">Production URL</Label>
+              <Input id="agillicProdUrl" placeholder="https://customer-prod.agillic.eu" value={agillicProdUrl} onChange={(e) => setAgillicProdUrl(e.target.value)} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="agillicProdKey">Production Key</Label>
@@ -508,14 +526,14 @@ export function SettingsForm({
               <Button
                 type="button"
                 variant="outline"
-                disabled={testingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicUrl}
+                disabled={testingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicStagingUrl}
                 onClick={async () => {
                   setTestingAgillic(true);
                   try {
                     const res = await fetch("/api/agillic/validate", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ api_key: agillicStagingKey, api_secret: agillicStagingSecret, instance_url: agillicUrl }),
+                      body: JSON.stringify({ api_key: agillicStagingKey, api_secret: agillicStagingSecret, instance_url: agillicStagingUrl }),
                     });
                     if (res.ok) {
                       toast.success("Staging connected!");
@@ -532,7 +550,7 @@ export function SettingsForm({
               </Button>
               <Button
                 type="button"
-                disabled={savingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicUrl}
+                disabled={savingAgillic || !agillicStagingKey || !agillicStagingSecret || !agillicStagingUrl}
                 onClick={async () => {
                   setSavingAgillic(true);
                   const supabase = createClient();
@@ -542,9 +560,10 @@ export function SettingsForm({
                       agillic_credentials: {
                         staging_key: agillicStagingKey,
                         staging_secret: agillicStagingSecret,
+                        staging_url: agillicStagingUrl,
                         prod_key: agillicProdKey,
                         prod_secret: agillicProdSecret,
-                        instance_url: agillicUrl,
+                        prod_url: agillicProdUrl,
                       },
                       from_name: fromName || null,
                     })

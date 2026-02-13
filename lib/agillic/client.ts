@@ -19,9 +19,10 @@ export interface AgillicCredentials {
 export interface AgillicOrgCredentials {
   staging_key: string;
   staging_secret: string;
+  staging_url: string;   // e.g. https://customer-stag.agillic.eu
   prod_key: string;
   prod_secret: string;
-  instance_url: string;
+  prod_url: string;      // e.g. https://customer-prod.agillic.eu
 }
 
 export class AgillicClient {
@@ -151,7 +152,7 @@ export function createStagingClient(
   return new AgillicClient({
     api_key: creds.staging_key,
     api_secret: creds.staging_secret,
-    instance_url: creds.instance_url,
+    instance_url: creds.staging_url,
   });
 }
 
@@ -165,6 +166,6 @@ export function createProductionClient(
   return new AgillicClient({
     api_key: creds.prod_key,
     api_secret: creds.prod_secret,
-    instance_url: creds.instance_url,
+    instance_url: creds.prod_url,
   });
 }

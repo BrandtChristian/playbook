@@ -189,9 +189,10 @@ async function handleAgillicTest(
   const creds = org.agillic_credentials as {
     staging_key: string;
     staging_secret: string;
+    staging_url: string;
     prod_key: string;
     prod_secret: string;
-    instance_url: string;
+    prod_url: string;
   } | null;
 
   if (!creds) {
