@@ -81,7 +81,7 @@ A marketing automation platform that uses Resend as sending infrastructure (unde
 
 ## Day 5: Polish, Features & Deploy — DONE
 
-- [x] **Rebrand**: "Hackathon ESP" -> **Forge** (by Dwarf). "F" lettermark in sidebar, updated metadata.
+- [x] **Rebrand**: "Hackathon ESP" -> **Forge**. "F" lettermark in sidebar, updated metadata.
 - [x] **Theme**: Switched from orange -> indigo accent color (OKLCH hue 264-266). Updated all CSS variables, hardcoded Tailwind classes, and hex fallbacks (#6366f1).
 - [x] **Dark mode**: Wired up `next-themes` with ThemeProvider. Sun/Moon toggle in dashboard header. Full dark mode support across all pages.
 - [x] **Visual email builder**: Block-based drag-and-drop editor with canvas, palette, properties panel, and AI prompt bar. Blocks: heading, text, button, image, divider, spacer, social, columns, quote, video, HTML.

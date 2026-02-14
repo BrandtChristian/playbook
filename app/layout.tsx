@@ -14,7 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Forge",
-  description: "Forge by Dwarf — Marketing automation powered by AI",
+  description: "Forge — Marketing automation powered by AI",
 };
 
 export default function RootLayout({

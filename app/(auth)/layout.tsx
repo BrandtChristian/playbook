@@ -23,7 +23,7 @@ export default function AuthLayout({
           </p>
         </div>
         <p className="text-primary-foreground/50 text-sm">
-          Forge by Dwarf
+          Forge
         </p>
       </div>
 

@@ -165,7 +165,7 @@ Resend API key and Agillic credentials are per-org in the database (not env vars
 
 ## Conventions
 
-- **Product name**: **Forge** (by Dwarf). Sidebar shows "F" lettermark + "Forge" text.
+- **Product name**: **Forge**. Sidebar shows "F" lettermark + "Forge" text.
 - **shadcn/ui theme**: Maia style, Radix base, stone base color, **indigo accent** (`oklch(0.511 0.262 266)`, hex `#6366f1`), Phosphor icons, DM Sans font, zero border radius.
 - **Dark mode**: Enabled via `next-themes` (`ThemeProvider` in `app/layout.tsx`). Toggle button in dashboard header (Sun/Moon icons). Theme colors defined for both `:root` and `.dark` in `globals.css`. Custom components use `dark:` Tailwind variants for hardcoded colors.
 - **Component pattern**: Server page fetches data via `getCurrentUser()` + Supabase queries, passes to a `"use client"` component (e.g., `contacts-client.tsx`, `campaigns-client.tsx`).

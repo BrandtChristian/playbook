@@ -485,7 +485,7 @@ export function SettingsForm({
               <Label htmlFor="agillicCompanyId">Agillic Company ID</Label>
               <Input
                 id="agillicCompanyId"
-                placeholder="e.g. dwarf"
+                placeholder="e.g. acme"
                 onChange={(e) => {
                   const id = e.target.value.trim().toLowerCase();
                   if (id) {
