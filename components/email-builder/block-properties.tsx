@@ -1,6 +1,7 @@
 "use client";
 
 import type { EmailBlock, SocialIconStyle } from "@/lib/email/blocks";
+import { compressImage } from "@/lib/compress-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -325,8 +326,9 @@ function ImageProperties({
     if (!file) return;
     e.target.value = "";
 
+    const compressed = await compressImage(file);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed);
 
     try {
       const res = await fetch("/api/upload", {

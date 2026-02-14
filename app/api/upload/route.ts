@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/dal";
 import sharp from "sharp";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_SIZE = 4 * 1024 * 1024; // 4MB (Vercel serverless limit is ~4.5MB)
 const MAX_WIDTH = 1200;
 
 export async function POST(request: Request) {

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { EmailBlock } from "@/lib/email/blocks";
+import { compressImage } from "@/lib/compress-image";
 import {
   UploadSimple,
   CircleNotch,
@@ -85,8 +86,9 @@ function ImageEditor({
   async function uploadFile(file: File) {
     setUploading(true);
     try {
+      const compressed = await compressImage(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressed);
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const json = await res.json();
       if (res.ok) {

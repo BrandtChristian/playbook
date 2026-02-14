@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { EmailBlock } from "@/lib/email/blocks";
+import { compressImage } from "@/lib/compress-image";
 import {
   Image as ImageIcon,
   Minus,
@@ -219,8 +220,9 @@ function ImageRenderer({
   async function uploadFile(file: File) {
     setUploading(true);
     try {
+      const compressed = await compressImage(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressed);
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -544,8 +546,9 @@ function ColumnZone({
     if (!file || !file.type.startsWith("image/")) return;
 
     const insertAt = getInsertIndex(e.clientY);
+    const compressed = await compressImage(file);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed);
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const json = await res.json();
