@@ -29,10 +29,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh the session — important for Server Components
+  // Check session locally (no network roundtrip) — the full getUser()
+  // validation still happens in getCurrentUser() within server components.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const user = session?.user ?? null;
 
   // Redirect unauthenticated users to login (except auth pages)
   const isPublicPage =

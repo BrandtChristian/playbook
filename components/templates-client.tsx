@@ -14,9 +14,19 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, PencilSimple, Trash, EnvelopeSimple, PaintBrush, CaretRight, CaretDown, Notebook } from "@phosphor-icons/react";
-import { TemplateEditor } from "@/components/template-editor";
-import { BrandBuilder } from "@/components/brand-builder";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { BrandConfig } from "@/components/brand-builder";
+
+const TemplateEditor = dynamic(
+  () => import("@/components/template-editor").then((m) => ({ default: m.TemplateEditor })),
+  { loading: () => <div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-[60vh] w-full" /></div> }
+);
+
+const BrandBuilder = dynamic(
+  () => import("@/components/brand-builder").then((m) => ({ default: m.BrandBuilder })),
+  { loading: () => <div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-[60vh] w-full" /></div> }
+);
 
 type Template = {
   id: string;

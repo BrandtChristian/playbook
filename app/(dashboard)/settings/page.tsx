@@ -10,23 +10,27 @@ export default async function SettingsPage() {
   const user = await getCurrentUser();
   const supabase = await createClient();
 
-  const { data: consentTypes } = await supabase
-    .from("consent_types")
-    .select("id, name, description, legal_text, is_active, version")
-    .eq("org_id", user.organizations.id)
-    .order("created_at", { ascending: true });
-
-  const { data: members } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url, role, job_title, preferred_test_email, created_at")
-    .eq("org_id", user.organizations.id)
-    .order("created_at", { ascending: true });
-
-  const { data: segments } = await supabase
-    .from("segments")
-    .select("id, name, contact_count")
-    .eq("org_id", user.organizations.id)
-    .order("name");
+  const [
+    { data: consentTypes },
+    { data: members },
+    { data: segments },
+  ] = await Promise.all([
+    supabase
+      .from("consent_types")
+      .select("id, name, description, legal_text, is_active, version")
+      .eq("org_id", user.organizations.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url, role, job_title, preferred_test_email, created_at")
+      .eq("org_id", user.organizations.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("segments")
+      .select("id, name, contact_count")
+      .eq("org_id", user.organizations.id)
+      .order("name"),
+  ]);
 
   return (
     <div className="space-y-6">
